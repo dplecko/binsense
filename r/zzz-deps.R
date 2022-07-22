@@ -1,0 +1,23 @@
+
+pkgs <- c("ricu", "readr", "ranger", "ggplot2", "icd", "plotly",
+          "latex2exp", "stringr", "assertthat", "data.table")
+
+if (!all(vapply(pkgs, requireNamespace, logical(1L)))) {
+  stop("Packages {pkgs} are required in order to proceed.")
+  if (!interactive()) q("no", status = 1, runLast = FALSE)
+}
+
+library(causalweight)
+library(readr)
+library(ranger)
+library(ggplot2)
+library(latex2exp)
+library(stringr)
+library(grf)
+library(assertthat)
+library(data.table)
+library(plotly)
+library(ricu)
+library(icd)
+
+Sys.setenv("RICU_CONFIG_PATH" = file.path(root, "config", "dict"))

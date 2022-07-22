@@ -1,0 +1,295 @@
+{
+  "elix": {
+    "description": "No. comorbidities",
+    "category": "Misc.",
+    "target": "id_tbl",
+    "sources": {
+      "mimic_demo": [
+        {
+          "table": "diagnoses_icd",
+          "class": "col_itm",
+          "callback": "elix_callback"
+        }
+      ],
+      "mimic": [
+        {
+          "table": "diagnoses_icd",
+          "class": "col_itm",
+          "callback": "elix_callback"
+        }
+      ],
+      "miiv": [
+        {
+          "table": "diagnoses_icd",
+          "class": "col_itm",
+          "group_var": "icd_version",
+          "callback": "elix_miiv"
+        }
+      ]
+    }
+  },
+  "careunit": {
+    "target": "id_tbl",
+    "sources": {
+      "miiv": [
+        {
+          "table": "icustays",
+          "val_var": "first_careunit",
+          "class": "col_itm"
+        }
+      ],
+      "mimic": [
+        {
+          "table": "icustays",
+          "val_var": "first_careunit",
+          "class": "col_itm"
+        }
+      ],
+      "mimic_demo": [
+        {
+          "table": "icustays",
+          "val_var": "first_careunit",
+          "class": "col_itm"
+        }
+      ]
+    }
+  },
+  "bmi_bin": {
+    "concepts": ["bmi"],
+    "description": "BMI (binary)",
+    "callback": "bmi_binary",
+    "class": "rec_cncpt",
+    "target": "id_tbl"
+  },
+  "acu_24": {
+    "concepts": ["sofa"],
+    "description": "SOFA at 24 hours",
+    "callback": "acute_dayone",
+    "class": "rec_cncpt",
+    "target": "id_tbl"
+  },
+    "diag": {
+    "target": "id_tbl",
+    "levels": ["MED", "SURG", "CMED", "CSURG", "VSURG", "NSURG", "OTH", "NMED", 
+"ORTHO", "TRAUM", "OMED", "TSURG", "GYN"],
+    "class": "fct_cncpt",
+    "description": "patient admission type",
+    "category": "demographics",
+    "sources": {
+      "aumc": [
+        {
+          "val_var": "specialty",
+          "table": "admissions",
+          "callback": "apply_map( c(Cardiochirurgie = 'surg', Cardiologie = 'med', ders = 'other', Gynaecologie = 'other', `Heelkunde Gastro-enterologie` = 'surg', `Heelkunde Longen/Oncologie` = 'surg', `Heelkunde Oncologie` = 'surg', Hematologie = 'med', `Intensive Care Volwassenen` = 'other', Inwendig = 'med', `Keel, Neus & Oorarts` = 'surg', Longziekte = 'med', `Maag-,Darm-,Leverziekten` = 'med', Mondheelkunde = 'surg', Nefrologie = 'med', Neurochirurgie = 'surg', Neurologie = 'med', Obstetrie = 'other', `Oncologie Inwendig` = 'med', Oogheelkunde = 'surg', Orthopedie = 'surg', `Plastische chirurgie` = 'surg', Reumatologie = 'med', Traumatologie = 'surg', Urologie = 'surg', Vaatchirurgie = 'surg', Verloskunde = 'other'))",
+          "class": "col_itm"
+        }
+      ],
+      "eicu": [
+        {
+          "table": "admissiondx",
+          "val_var": "admitdxpath",
+          "callback": "eicu_adx",
+          "class": "col_itm"
+        }
+      ],
+      "eicu_demo": [
+        {
+          "table": "admissiondx",
+          "val_var": "admitdxpath",
+          "callback": "eicu_adx",
+          "class": "col_itm"
+        }
+      ],
+      "miiv": [
+        {
+          "table": "services",
+          "val_var": "curr_service",
+          "callback": "mimic_adm_diag",
+          "class": "col_itm"
+        }
+      ],
+      "mimic": [
+        {
+          "table": "services",
+          "val_var": "curr_service",
+          "callback": "mimic_adm_diag",
+          "class": "col_itm"
+        }
+      ],
+      "mimic_demo": [
+        {
+          "table": "services",
+          "val_var": "curr_service",
+          "callback": "mimic_adm_diag",
+          "class": "col_itm"
+        }
+      ]
+    }
+  },
+  "DM": {
+    "description": "Diabetes Mellitus (ICD-9 / ICD-10)",
+    "category": "Misc.",
+    "target": "id_tbl",
+    "sources": {
+      "mimic_demo": [
+        {
+          "table": "diagnoses_icd",
+          "class": "col_itm",
+          "callback": "DM910_callback"
+        }
+      ],
+      "mimic": [
+        {
+          "table": "diagnoses_icd",
+          "class": "col_itm",
+          "callback": "DM910_callback"
+        }
+      ],
+      "miiv": [
+        {
+          "table": "diagnoses_icd",
+          "class": "col_itm",
+          "callback": "DM910_callback"
+        }
+      ],
+      "eicu_demo": [
+        {
+          "table": "diagnosis",
+          "class": "col_itm",
+          "callback": "DM910_callback"
+        }
+      ],
+      "eicu": [
+        {
+          "table": "diagnosis",
+          "class": "col_itm",
+          "callback": "DM910_callback"
+        }
+      ]
+    }
+  },
+  "tw_avg_glu": {
+    "concepts": ["glu", "icu_end"],
+    "description": "Time-weighted average glucose (mg/dL)",
+    "callback": "tw_avg_gluc",
+    "class": "rec_cncpt",
+    "target": "id_tbl"
+  },
+  "icu_end": {
+    "target": "id_tbl",
+    "description": "ICU window",
+    "category": "outcome",
+    "sources": {
+      "miiv": [
+        {
+          "table": "icustays",
+          "class": "col_itm",
+          "val_var": "outtime"
+        }
+      ],
+      "mimic": [
+        {
+          "table": "icustays",
+          "class": "col_itm",
+          "val_var": "outtime"
+        }
+      ],
+      "mimic_demo": [
+        {
+          "table": "icustays",
+          "class": "col_itm",
+          "val_var": "outtime"
+        }
+      ]
+    }
+  },
+  "is_hypo": {
+    "concepts": ["glu"],
+    "description": "Hypoglycemia",
+    "category": "outcome",
+    "callback": "is_hypo_cb",
+    "class": "rec_cncpt",
+    "target": "id_tbl"
+  },
+  "smoke": {
+    "description": "Smoking (ICD-9/ICD-10)",
+    "category": "Misc.",
+    "target": "id_tbl",
+    "sources": {
+      "mimic_demo": [
+        {
+          "table": "diagnoses_icd",
+          "class": "col_itm",
+          "callback": "SMK_callback"
+        }
+      ],
+      "mimic": [
+        {
+          "table": "diagnoses_icd",
+          "class": "col_itm",
+          "callback": "SMK_callback"
+        }
+      ],
+      "miiv": [
+        {
+          "table": "diagnoses_icd",
+          "class": "col_itm",
+          "callback": "SMK_miiv",
+          "group_var": "icd_version"
+        }
+      ]
+    }
+  },
+  "icd9": {
+    "description": "ICD-9 codes",
+    "category": "Misc.",
+    "target": "id_tbl",
+    "sources": {
+      "mimic_demo": [
+        {
+          "table": "diagnoses_icd",
+          "class": "col_itm",
+          "callback": "elix_callback"
+        }
+      ],
+      "mimic": [
+        {
+          "table": "diagnoses_icd",
+          "class": "col_itm",
+          "callback": "elix_callback"
+        }
+      ],
+      "miiv": [
+        {
+          "table": "diagnoses_icd",
+          "class": "col_itm",
+          "group_var": "icd_version",
+          "callback": "icd9_callback"
+        }
+      ]
+    }
+  },
+  "icd10": {
+    "description": "ICD-10 codes",
+    "category": "Misc.",
+    "target": "id_tbl",
+    "class": "chr_cncpt",
+    "sources": {
+      "miiv": [
+        {
+          "table": "diagnoses_icd",
+          "class": "col_itm",
+          "group_var": "icd_version",
+          "callback": "icd10_callback"
+        }
+      ]
+    }
+  },
+  "icd_code": {
+    "concepts": ["icd9", "icd10"],
+    "description": "ICD codes (9 or 10)",
+    "category": "outcome",
+    "callback": "icd_merge_callback",
+    "class": "rec_cncpt"
+  }
+}
