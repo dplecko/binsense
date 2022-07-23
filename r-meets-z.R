@@ -31,7 +31,7 @@ logreg <- glm(
 
 # summary(logreg)
 pyrx0 <- pyrx1 <- rep(0, 2^k)
-logreg$coefficients[seq_len(k)+2] <- 3
+#logreg$coefficients[seq_len(k)+2] <- 3
 for (i in seq_len(2^k)) {
   
   i_bin <- as.integer(intToBits(i-1))
@@ -70,7 +70,7 @@ sensitivity_ATE <- function(fi_x1, fi_x0, order = Inf) {
   Ax0 <- Ax0 + diag(1 - colSums(Ax0))
   Ax1 <- Ax1 + diag(1 - colSums(Ax1))
   
-  if (any(Ax0 < 0) | any(Ax1 < 0)) return(NA)
+  if (any(Ax0 < 0) | any(Ax1 < 0)) return(list(ATE = NA, cmb_diff = NA))
   
   if (is.element(0, eigen(Ax0)$values)) browser()
   pzx0 <- solve(Ax0) %*% prx0
@@ -88,25 +88,33 @@ sensitivity_ATE <- function(fi_x1, fi_x0, order = Inf) {
       any(c(range(pzx0), range(pzx1)) < 0)) {
     cat("Walking out of simplex", c(range(pzx0), range(pzx1)), "\n")
   }
-  pz <- solve(Ax0) %*% prx0 * mean(dat$bmi <= 25) + 
-    solve(Ax1) %*% prx1 * mean(dat$bmi > 25) 
+  pz <- pzx0 * mean(dat$bmi <= 25) + 
+    pzx1 * mean(dat$bmi > 25) 
   
   dlt_x0x1 <- rep(0, 2^k)
   for (i in seq_len(2^k)) {
     
     dlt_x0x1[i] <- sum(pyrx1 * Ax1[, i] - pyrx0 * Ax0[, i])
   }
+
+  wgh_vec <- sapply(seq_along(pzx0) - 1, function(x) sum(as.integer(intToBits(x))))
   
-  sum(dlt_x0x1 * pz)
+  list(
+    ATE = sum(dlt_x0x1 * pz),
+    cmb_diff = sum(pzx1 * wgh_vec) - sum(pzx0 * wgh_vec)
+  )
 }
 
 p_range <- seq(0, 0.2, 0.01)
 df <- expand.grid(fi_x0 = p_range, fi_x1 = p_range)
 df$adjusted_ATE <- 0
+df$cmb_diff <- 0
 
 for (i in seq_len(nrow(df))) {
   
-  df$adjusted_ATE[i] <- sensitivity_ATE(df$fi_x1[i], df$fi_x0[i], order = 1)
+  res <- sensitivity_ATE(df$fi_x1[i], df$fi_x0[i], order = 1)
+  df$adjusted_ATE[i] <- res[["ATE"]]
+  df$cmb_diff[i] <- res[["cmb_diff"]]
 }
 
 fidel <- matrix(df$adjusted_ATE, ncol = length(p_range))
@@ -125,3 +133,22 @@ fig <- fig %>% layout(
 )
 
 fig
+
+# difference in comorbidities plot
+fidel <- matrix(df$cmb_diff, ncol = length(p_range))
+
+fig <- plot_ly(showscale = FALSE)
+fig <- fig %>% add_surface(x = ~p_range, y =~p_range, z = ~fidel)
+
+fig <- fig %>% layout(
+  scene = list(xaxis=list(title = "Fidelity x0",
+                          ),
+               yaxis=list(title = "Fidelity x1"),
+               zaxis=list(title = "Difference in Expected # of comorbidities")
+          )
+)
+
+fig # can we induce a larger difference? how? that is key for sensitivity...
+
+# need to rethink if walking out of the simplex is a 
+# "strong enough sensitivity perturbation"
