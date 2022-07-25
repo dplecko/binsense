@@ -123,14 +123,13 @@ signif[,] <- 0
 
 fig <- plot_ly(showscale = FALSE)
 fig <- fig %>% add_surface(z = ~fidel)
-fig <- fig %>% add_surface(z = ~signif, opacity = 0.6)
+fig <- fig %>% add_surface(x = ~p_range, y = ~p_range, z = ~signif, opacity = 0.6)
 
 fig <- fig %>% layout(
-  scene = list(xaxis=list(title = "Fidelity x0"),
-               yaxis=list(title = "Fidelity x1"),
-               zaxis=list(title = "Treatment Effect Estimate",
-                          range = c(-0.061, 0.01)))
-)
+  scene = list(xaxis=list(title = TeX("\\phi_{x_0}")),
+               yaxis=list(title = TeX("\\phi_{x_1}")),
+               zaxis=list(title = TeX("ATE_{\\phi_{x_0}, \\phi_{x_1}}")))
+) %>% config(mathjax = "cdn")
 
 fig
 
@@ -138,12 +137,11 @@ fig
 fidel <- matrix(df$cmb_diff, ncol = length(p_range))
 
 fig <- plot_ly(showscale = FALSE)
-fig <- fig %>% add_surface(x = ~p_range, y =~p_range, z = ~fidel)
+fig <- fig %>% add_surface(x = ~p_range, y = ~p_range, z = ~fidel)
 
 fig <- fig %>% layout(
-  scene = list(xaxis=list(title = "Fidelity x0",
-                          ),
-               yaxis=list(title = "Fidelity x1"),
+  scene = list(xaxis=list(title = TeX("\\phi_{x_0}")),
+               yaxis=list(title = TeX("\\phi_{x_1}")),
                zaxis=list(title = "Difference in Expected # of comorbidities")
           )
 )
