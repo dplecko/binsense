@@ -74,5 +74,6 @@ cat("L2 norm between Bp(r) and p(z)", sum((B %*% pr - pz)^2), "\n")
 
 cat("L2 norm between A^(-1)p(r) and p(z)", sum((solve(A) %*% pr - pz)^2), "\n")
 
-cat("L2 norm between A^(-1)p(r) and Bp(r)", sum((solve(A) %*% pr - B %*% pr)^2), "\n")
+cat("L2 norm between A^(-1)p(r) and Bp(r)", sum((solve(A) %*% pr - B %*% pr)^2), 
+    "\n")
 

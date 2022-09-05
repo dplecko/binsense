@@ -1,44 +1,8 @@
 
 expit <- function(x) exp(x) / (1 + exp(x))
 
-n <- 100000
-pz <- c(0.5, 0.2, 0.2, 0.1)
-k <- 2
-
-set.seed(2022)
-
-Z <- sample(seq_len(2^k)-1, n, prob = pz, replace = TRUE)
-
-lambda1 <- lambda2 <- 1
-mu1 <- mu2 <- 1
-beta <- 0.1
-fi <- 0.3
-
-
-Z <- lapply(Z, function(z) as.integer(intToBits(z)[1:k]))
-Z <- do.call(rbind, Z)
-
-X <- rbinom(n, 1, expit(Z %*% c(lambda1, lambda2) - 2))
-
-Y <- rbinom(n, 1, expit(Z %*% c(mu1, mu2) + X * beta - 2))
-
-ate <- mean(expit(Z %*% c(mu1, mu2) + beta - 2) - expit(Z %*% c(mu1, mu2) - 2))
-
-
-
-R <- Z
-for (i in seq_len(k)) {
-  
-  R[, i] <- Z[, i] * rbinom(n, 1, prob = 1 - fi)
-  
-}
-
-dat <- data.frame(X, R, Y)
-dat$X <- ifelse(dat$X == 1, 30, 20)
-dat$Y <- ifelse(dat$Y == 1, TRUE, FALSE)
-names(dat) <- c("bmi", "CHF", "Pulmonary", "death")
-dat <- as.data.table(dat)
-
+synth <- synth_data()
+dat <- synth[["dat"]]
 
 fixy <- list(list(0, 0), list(0, 0))
 fixy[[1]][[1]] <- fixy[[1]][[2]] <- fixy[[2]][[1]] <- fixy[[2]][[2]] <- fi
