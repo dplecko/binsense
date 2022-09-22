@@ -37,29 +37,58 @@ synth_data <- function(n = 10^5, pz = c(0.5, 0.1, 0.1, 0.3), k = 2, seed = 22) {
   )
 }
 
-synth_data_mid <- function(n = 10^5, k = 5, seed = 22) {
+synth_data_mid <- function(n = 10^4, k = 5, seed = 22,
+                           class = c("latent_u", "2nd_order_exp")) {
+  
+  
+  class <- match.arg(class, c("latent_u", "2nd_order_exp"))
+  assertthat::assert_that(class %in% c("latent_u", "2nd_order_exp"),
+                          msg = "Unknown model class specified.")
   
   set.seed(seed)
-  
-  u <- runif(n)
-  ulam <- rep(1/4, 5)
-  
-  Z <- c()
-  for (i in seq_len(k)) {
-    
-    Z <- cbind(Z, rbinom(n, 1, prob = expit(ulam * u - 1)))
-  }
-  
-  lam <- rep(1/2, k)
-  mu <- rep(1/2, k)
-  beta <- 0.1
   fi <- 0.3
   
-  X <- rbinom(n, 1, expit(Z %*% lam - k/2))
+  if (class == "latent_u") {
+    
+    u <- runif(n)
+    ulam <- rep(1/4, 5)
+    
+    Z <- c()
+    for (i in seq_len(k)) {
+      
+      Z <- cbind(Z, rbinom(n, 1, prob = expit(ulam * u - 1)))
+    }
+    
+  } else if (class == "2nd_order_exp") {
+    
+    pz <- rep(0, 2^k)
+    sig <- runif(k) - 2 / 3
+    Sig <- matrix((runif(k^2) - 1/2) / 3 , nrow = k)
+    
+    pz <- vapply(
+      seq_len(2^k),
+      function(i) {
+        z <- as.integer(intToBits(i-1)[seq_len(k)])
+        exp(sum(z * sig) + t(z) %*% Sig %*% z)
+      }, numeric(1L)
+    )
+    
+    Z <- sample.int(2^k, size = n, prob = pz, replace = TRUE)
+    Z <- lapply(Z, function(z) as.integer(intToBits(z-i)[seq_len(k)]))
+    Z <- do.call(rbind, Z)
+    
+  }
   
-  Y <- rbinom(n, 1, expit(Z %*% mu + X * beta - k/2))
+  lam <- -rep(2/3, k) # comorbidities make obesity less likely!
+  mu <- rep(2/3, k) # comorbidities make mortality more likely!
+  beta <- -0.05 # obesity protects!
   
-  ate <- mean(expit(Z %*% mu + beta - k/2) - expit(Z %*% mu - k/2))
+  X <- rbinom(n, 1, expit(Z %*% lam - sum(lam) / 2))
+  
+  Y <- rbinom(n, 1, expit(Z %*% mu + X * beta - sum(mu) / 2))
+  
+  # ate <- mean(expit(Z %*% mu + beta - 0.66 * k * mu[1]) - 
+  #               expit(Z %*% mu - 0.5 * k * lam[1]))
   
   R <- Z
   for (i in seq_len(k)) {
@@ -79,6 +108,7 @@ synth_data_mid <- function(n = 10^5, k = 5, seed = 22) {
   pz <- pz / sum(pz)
   
   list(
-    ate = ate, dat = dat, Z = Z, pz = pz
+    dat = dat, Z = Z, pz = pz, beta = beta#, ate = ate 
   )
 }
+
