@@ -20,8 +20,8 @@ A_xy <- function(fi_xy, k, order = Inf) {
   
   Axy <- Axy + diag(1 - colSums(Axy))
   
-  assert_that(!is.element(0, eigen(Axy)$values),
-              msg = "Singular transition matrix")
+  assertthat::assert_that(!is.element(0, eigen(Axy)$values),
+                          msg = "Singular transition matrix")
   
   Axy
 }
@@ -45,3 +45,22 @@ invert_A_xy <- function(A, pz) {
   
   B
 }
+
+# # explore order of the sup norm
+# 
+# k_seq <- seq.int(2, 10)
+# fi <- 0.2
+# res <- lapply(
+#   k_seq,
+#   function(k) {
+#     B <- solve(A_xy(fi, k))
+#     c(max(eigen(B)$values), max(B), (1-fi)^(-k))
+#   }
+# )
+# 
+# df <- data.frame(do.call(rbind, res))
+# df <- cbind(df, k = k_seq)
+# 
+# ggplot(df, aes(x = k, y = X1)) +
+#   geom_line() + geom_point() + theme_bw()
+

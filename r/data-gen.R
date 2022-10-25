@@ -104,7 +104,7 @@ synth_data_mid <- function(n = 10^4, k = 5, seed = 22,
   dat <- as.data.table(dat)
   
   enc_mat <- t(replicate(nrow(dat), 2^(seq_len(k) - 1L)))
-  pz <- table(rowSums(Z * enc_mat))
+  pz <- tabulate(rowSums(Z * enc_mat) + 1, nbins = 2^k)
   pz <- pz / sum(pz)
   
   list(

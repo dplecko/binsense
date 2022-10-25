@@ -71,13 +71,19 @@ spcol_bayes <- function(dat, fi, cmb = setdiff(names(dat), c("bmi", "death"))) {
 
 model_bayes <- function(dat, fi, cmb = setdiff(names(dat), c("bmi", "death")),
                         niter = 1L, pz_ground = NULL, Z_ground = NULL,
-                        seed = 22, display = FALSE) {
+                        seed = 22, gibbs = 10, gibbs_slope = 0, tail_samples = 1,
+                        display = FALSE) {
   
-  mod_and_pred <- function(x, y, fid) {
-    glm(y ~ ., cbind(y = y, x = x), family = binomial())$fitted.values / (1-fid)
+  mod <- function(x, y) {
+    glm(as.formula(paste(names(y), "~ .")), 
+        cbind(y, x), family = binomial())
   }
   
-  add_cmb <- function(col, aux_data, u, bmi_bin, death, fi) {
+  pred <- function(mod, x) {
+    predict(mod, x, type = "response")
+  }
+  
+  add_cmb <- function(mod, col, aux_data, u, bmi_bin, death, fi) {
     
     pi <- fii <- rep(0, length(col))
     for (x in c(T, F)) {
@@ -88,15 +94,15 @@ model_bayes <- function(dat, fi, cmb = setdiff(names(dat), c("bmi", "death")),
         idx <- bmi_bin == x & death == y
         
         # build model and get predictions
-        pi[idx] <- mod_and_pred(aux_data[idx], col[idx], fid = fi[[x+1]][[y+1]])
+        pi[idx] <- pred(mod[[1+x]][[1+y]], aux_data[idx])
         fii[idx] <- fi[[x+1]][[y+1]]
       }
     }
     
     prob <- pi * fii / (1 - pi + pi * fii)
-    add <- u < prob
+    add <- runif(length(u)) < prob # allow variability (for Gibbs)
     list(
-      update = col | add,
+      update = as.integer(col | add),
       thresh = prob
     )
   }
@@ -121,50 +127,95 @@ model_bayes <- function(dat, fi, cmb = setdiff(names(dat), c("bmi", "death")),
   bmi_bin <- do.call(c, bmi_bin)
   death <- do.call(c, death)
   
-  thresh <- beta_hat <- nZ_hat <- list()
+  if (!is.null(Z_ground)) {
+    
+    Z_ground <- as.data.table(Z_ground)
+    Z_ground <- setnames(Z_ground, names(Z_ground), names(Rt))
+  }
+  
+  thresh <- beta_hat <- nZ_hat <- fit <- adv_acc <- pz <- list()
   cnt <- 1L
   for (nit in seq_len(niter)) {
     
-    pz <- table(rowSums(Rt * enc_mat))
-    pz <- pz / sum(pz)
+    # train adversarial forest to predict which is which
+    if (!is.null(Z_ground)) {
+      
+      adv <- rbind(Z_ground, Rt)
+      adv <- cbind(adv, label = c(rep(0, nrow(Z_ground)), rep(1, nrow(Rt))))
+      adv_rf <- ranger(label ~ ., data = adv)
+      adv_acc[[nit]] <- mean(abs(adv$label - adv_rf$predictions) < 0.5)
+    }
+    
+    pz[[nit]] <- tabulate(rowSums(Rt * enc_mat) + 1, nbins = 2^length(cmb))
+    pz[[nit]] <- pz[[nit]] / sum(pz[[nit]])
     
     if (!is.null(pz_ground) & display) {
-      cat("Iter", nit-1, "->", round(100 * sum(abs(pz - pz_ground)^2), 3), "\n")
+      cat("Iter", nit-1, "->", round(100 * sum(abs(pz[[nit]] - pz_ground)^2), 3), 
+          "\n")
     }
     
+    # update the model (M-step) / or initialize in first round
+    #'* Currently taking the MLE over a single Gibbs sample *
+    #'* -> need to take over a tail (after burn-in period) *
+    #'* Need to compare stability -> how to do it? *
+    if (nit == 1L) {
+      psi_dat <- Rt
+      num_rep <- 1L
+    }
     for (i in seq_len(ncol(Rt))) {
       
-      step <- add_cmb(dat[[cmb[i]]], Rt[, -i, with=FALSE], Ui[, i], 
-                      bmi_bin, death, fi)
-      Rt[, c(cmb[i]) := step$update]
+      fiti <- list(list(0, 0), list(0, 0))
       
-      # need to do several iterations of Gibbs before refitting
-      fit <- glm(death ~ ., family = binomial(), 
-                 data = cbind(death, Rt, bmi_bin))
-      
-      beta_hat[[cnt]] <- fit$coefficients["bmi_binTRUE"]
-      nZ_hat[[cnt]] <- colSums(Z_ground) - colSums(Rt)
-      cnt <- cnt + 1
-      
-      if (i == 1) {
+      for (x in c(T, F)) {
         
-        thresh[[nit]] <- step$thresh
-        if (nit > 1 & display) {
+        for (y in c(T, F)) {
           
-          cat("Threshold L2 change", sum((thresh[[nit]] - thresh[[nit-1]])^2), 
-              "\n") 
+          idx <- rep(bmi_bin == x & death == y, num_rep)
+          
+          #'* expand the previous_steps list *
+          fiti[[1+x]][[1+y]] <- mod(psi_dat[idx, -i, with=FALSE], 
+                                    psi_dat[idx, i, with=FALSE])
         }
       }
+      fit[[i]] <- fiti
     }
+    
+    # Gibbs sampling until convergence (Monte Carlo for E-step)
+    prev_step <- list()
+    for (gb in seq_len(gibbs + gibbs_slope * (nit - 1))) {
+      for (i in seq_len(ncol(Rt))) {
+        
+        # need to do several iterations of Gibbs before refitting
+        step <- add_cmb(fit[[i]], dat[[cmb[i]]], Rt[, -i, with=FALSE], Ui[, i], 
+                        bmi_bin, death, fi)
+        Rt[, c(cmb[i]) := step$update]
+      }
+      #'* save the different steps in a previous_steps list! *
+      prev_step[[gb]] <- copy(Rt)
+    }
+    
+    # estimate Beta_hat
+    psi_dat <- do.call(rbind, tail(prev_step, n = tail_samples))
+    num_rep <- nrow(psi_dat) / nrow(Rt)
+    assert_that(num_rep == round(num_rep), msg = "Non-integer repetition value.")
+    
+    fit <- glm(death ~ ., family = binomial(), 
+               data = cbind(death = rep(death, num_rep), 
+                            psi_dat, 
+                            bmi_bin = rep(bmi_bin, num_rep)))
+    
+    beta_hat[[cnt]] <- fit$coefficients["bmi_binTRUE"]
+    nZ_hat[[cnt]] <- colSums(Z_ground) - colSums(Rt)
+    cnt <- cnt + 1
+    
   }
-  
-  # for (i in seq_along(cmb)) dat[, c(cmb[i]) := Rt[[i]]]
   
   list(
     pz = pz,
     thresholds = thresh,
     beta = beta_hat,
     nZ_diff = nZ_hat,
+    adverse = adv_acc,
     seed = seed
   )
   

@@ -3,13 +3,13 @@ root <- rprojroot::find_root(rprojroot::has_dir(".git"))
 r_dir <- file.path(root, "r")
 invisible(lapply(list.files(r_dir, full.names = TRUE), source))
 
-kseq <- seq.int(3L, 11L, 2L)
-mcseq <- c(1, 3, 5, 10)
+kseq <- seq.int(3L, 11L, 4L)
+mcseq <- c(0, 1, 5, 10)
 famseq <- c("latent_u")
-seedseq <- seq.int(2022L, 2027L)
+seedseq <- seq.int(22L, 24L)
 
 df <- expand.grid(kseq, mcseq, famseq, seedseq, stringsAsFactors = FALSE)
-names(df) <- c("dimension", "MC", "family", "seed")
+names(df) <- c("dimension", "gibbs", "family", "seed")
 df$MSE <- df$beta <- df$beta_hat <- 0
 
 for (i in seq_len(nrow(df))) {
@@ -21,8 +21,8 @@ for (i in seq_len(nrow(df))) {
   fixy <- list(list(0, 0), list(0, 0))
   fixy[[1]][[1]] <- fixy[[1]][[2]] <- fixy[[2]][[1]] <- fixy[[2]][[2]] <- 0.3
   
-  fwd <- model_bayes(copy(dat), fixy, pz_ground = aux[["pz"]], niter = 5L,
-                     Z_ground = aux$Z, seed = seq_len(df$MC[i]))
+  fwd <- model_bayes(copy(dat), fixy, pz_ground = aux[["pz"]], niter = 10L,
+                     Z_ground = aux$Z, gibbs_slope = df$gibbs[i])
   
   df$beta[i] <- aux$beta
   df$beta_hat[i] <- tail(fwd$beta, n = 1L)[[1]]
@@ -40,7 +40,7 @@ fig <- plot_ly(x = kseq, y = mcseq, z = ~contour)
 fig <- fig %>% add_surface()
 fig <- fig %>% layout(
   scene = list(xaxis=list(title = "Dimensionality"),
-               yaxis=list(title = "# MC samples"),
+               yaxis=list(title = "# Gibbs slope"),
                zaxis=list(title = "relative L1 error")
   )
 )
