@@ -1,12 +1,13 @@
 
-sensitivity_ATE <- function(fi, dat, cmb, order = Inf) {
+sensitivity_ATE <- function(fi, dat, order = Inf, verbose = FALSE) {
   
+  cmb <- setdiff(names(dat), c("stay_id", "bmi_bin", "death"))
   k <- length(cmb)
   enc_mat <- t(replicate(nrow(dat), 2^(seq_along(cmb) - 1L)))
   
   # get P(y | r, x)
   logreg <- glm(
-    as.formula(paste("factor(death) ~", paste(c("(bmi >25)", cmb), 
+    as.formula(paste("factor(death) ~", paste(c("bmi_bin", cmb), 
                                               collapse = "+"))),
     data = dat, family = "binomial"
   )
@@ -20,7 +21,7 @@ sensitivity_ATE <- function(fi, dat, cmb, order = Inf) {
     
   }
   
-  pr <- pz <- pxy <- A <- B <- list(list(0, 0), list(0, 0))
+  pr <- pz <- pxy <- A <- A_inv <- B <- list(list(0, 0), list(0, 0))
   
   x0 <- y0 <- 0
   x1 <- y1 <- 1
@@ -29,8 +30,7 @@ sensitivity_ATE <- function(fi, dat, cmb, order = Inf) {
     
     for (y in c(T, F)) {
       
-      idx <- ifelse(rep(x, nrow(dat)), (dat$bmi > 25), !(dat$bmi > 25)) & 
-        ifelse(rep(y, nrow(dat)), (dat$death), !(dat$death))
+      idx <- dat$bmi_bin == x & dat$death == y
       
       cprxy <- tabulate(
         rowSums(
@@ -50,19 +50,41 @@ sensitivity_ATE <- function(fi, dat, cmb, order = Inf) {
         return(list(ATE = NA, cmb_diff = NA))
       
       
-      pz[[x + 1]][[y + 1]] <- solve(A[[x + 1]][[y + 1]]) %*% 
-        pr[[x + 1]][[y + 1]]
+      pz[[x + 1]][[y + 1]] <- 
+        # solve(A[[x + 1]][[y + 1]]) %*%  pr[[x + 1]][[y + 1]]
+        vapply(
+          seq_len(2^k),
+          function(z) infer_pz(z, pr[[x + 1]][[y + 1]], fi[[x + 1]][[y + 1]], k),
+          numeric(1L)
+      )
       
+      # assert_that(sum(abs(pz[[x + 1]][[y + 1]] - pz_cand)) < 10^(-10))
+      
+      A_inv[[x+1]][[y+1]] <- lapply(
+        seq_len(2^k),
+        function(z) infer_pz(z, pr[[x + 1]][[y + 1]], fi[[x + 1]][[y + 1]], k, T)
+      )
+      A_inv[[x+1]][[y+1]] <- do.call(rbind, A_inv[[x+1]][[y+1]])
+      
+      # max(abs(solve(A[[x + 1]][[y + 1]]) - A_inv)) (works!)
+      
+      # B represents P(z | r, x, y)
       B[[x + 1]][[y + 1]] <- invert_A_xy(A[[x + 1]][[y + 1]], 
-                                         pz[[x + 1]][[y + 1]])
+                                         pz[[x + 1]][[y + 1]], 
+                                         pr[[x + 1]][[y + 1]])
+      
       
       if (check_simplex(pz[[x + 1]][[y + 1]])) {
-        
+        initial <- pz[[x + 1]][[y + 1]]
         pz[[x + 1]][[y + 1]] <- locate_simplex(pr[[x + 1]][[y + 1]], 
-                                               solve(A[[x + 1]][[y + 1]]))
+                                               A_inv[[x + 1]][[y + 1]])
+        correction <- sum(abs(initial - pz[[x+1]][[y+1]]) * 100)
+        if (verbose) {
+          cat("Locate simplex correction ", round(correction, 2), "%\n", sep = "")
+        }
       }
       
-      if (min(pz[[x + 1]][[y + 1]]) < 0 | max(pz[[x + 1]][[y + 1]]) > 1) {
+      if (min(pz[[x + 1]][[y + 1]]) < -(10)^(-10) | max(pz[[x + 1]][[y + 1]]) > 1) {
         cat("Walking out of simplex for (x,y)", x, y, "and range", 
             range(pz[[x + 1]][[y + 1]]), "\n")
       }

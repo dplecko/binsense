@@ -1,0 +1,29 @@
+[
+  {
+    "name": "anzics",
+    "id_cfg": {
+      "patient": {
+        "id": "PatientID",
+        "position": 2,
+        "start": "HOSP_AD_DTM",
+        "end": "HOSP_DS_DTM",
+        "table": "main"
+      },
+      "icustay": {
+        "id": "ICUStayID",
+        "position": 1,
+        "start": "ICU_AD_DTM",
+        "end": "ICU_DS_DTM",
+        "table": "main"
+      }
+    },
+    "tables": {
+      "main": {
+        "defaults": {
+          "index_var": "ICU_AD_DTM",
+          "time_vars": ["ICU_DS_DTM", "HOSP_AD_DTM", "HOSP_DS_DTM"]
+        }
+      }
+    }
+  }
+]

@@ -1,3 +1,29 @@
+
+
+anzics_binary <- function(x, val_var, ...) {
+  
+  x[, c(val_var) := ifelse(get(val_var) == 1, 1, 0)]
+  x
+}
+
+anzics_death <- function(x, ...) {
+  
+  x[, DIED := ifelse(DIED == 1, TRUE, FALSE)]
+  
+  x
+}
+
+anzics_sex <- function(x, ...) {
+
+  x[, SEX := ifelse(SEX == "M", "Male", "Female")]
+  
+  x
+}
+
+eicu_diag <- function(...) {
+  browser()
+}
+
 bmi_binary <- function(bmi, ...) {
   
   breaks <- c(-Inf, 25, Inf)
@@ -53,7 +79,7 @@ elix_callback <- function(x, ...) {
   intm <- comorbid_elix(intm)
   rm_cols <- which(colnames(intm) %in% rm_cols)
   intm <- rowSums(intm[, -rm_cols])
-  browser()
+  #browser()
   res <- id_tbl(
     id = as.integer(names(intm)),
     val = intm, id_vars = "id"
@@ -87,7 +113,7 @@ elix_miiv <- function(x, group_var, ...) {
     
     res
   }
-  browser()
+  # browser()
   rbind(
     get_elix(x[get(group_var) == 9], sub_var),
     get_elix(x[get(group_var) == 10], sub_var)
@@ -286,7 +312,6 @@ SMK_miiv <- function(x, group_var, ...) {
 get_icd <- function(src = "miiv", index = "elix") {
   
   load(file.path(root, "data", "icd.rda"))
-  icd
   
   get_elix <- function(x, sub_var, index) {
     intm <- data.frame(
@@ -313,55 +338,6 @@ get_icd <- function(src = "miiv", index = "elix") {
   
 }
 
-expit <- function(x) exp(x) / (1 + exp(x))
-
-check_simplex <- function(pzx) {
-  
-  if (min(pzx) < 0 || max(pzx) > 1) {
-    return(TRUE)
-  }
-  FALSE
-}
-
-locate_simplex <- function(prx, Ainv) {
-  
-  b <- Ainv %*% prx
-  a <- prx
-  lambda <- 1
-  cnt <- 0
-  while(sum(b < 0)) {
-    cnt <- cnt+1
-    idx <- which(b < 0)
-    lambda_max <- min(a[idx] / (a-b)[idx])
-    idx_max <- idx[which.min(a[idx] / (a-b)[idx])]
-
-    # cat("Max Lambda move", lambda_max, "\n")
-    a <- a + lambda_max * (b-a)
-    b[idx_max] <- 0
-    lambda <- lambda - lambda_max
-  }
-  cat(cnt, "Max(Lambda) steps\n")
-  a + lambda * (b-a)
-}
-
-search_lambda <- function(prx, Ainv) {
-  
-  idx <- which.min(Ainv %*% prx)
-  
-  weights <- Ainv[idx, ]
-  
-  a <- 0
-  b <- 1
-  while(b-a > 0.01) {
-    
-    mid <- (b+a)/2
-    cand <- prx * (1-mid) + (mid) * Ainv %*% prx
-    if (check_simplex(cand)) {
-      b <- mid
-    } else {
-      a <- mid
-    }
-  }
-
-  prx * (1-a) + (a) * Ainv %*% prx
+expit <- function(x) {
+  exp(x) / (1 + exp(x))
 }

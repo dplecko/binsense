@@ -1,6 +1,10 @@
 
 pkgs <- c("ricu", "readr", "ranger", "ggplot2", "icd", "plotly",
-          "latex2exp", "stringr", "assertthat", "data.table")
+          "latex2exp", "stringr", "assertthat", "data.table", "scales")
+
+Sys.setenv("RICU_CONFIG_PATH" = file.path(root, "config"))
+Sys.setenv("RICU_SRC_LOAD" = 
+             "mimic,miiv,aumc,hirid,eicu,eicu_demo,mimic_demo,anzics")
 
 if (!all(vapply(pkgs, requireNamespace, logical(1L)))) {
   stop("Packages {pkgs} are required in order to proceed.")
@@ -19,5 +23,4 @@ library(data.table)
 library(plotly)
 library(ricu)
 library(icd)
-
-Sys.setenv("RICU_CONFIG_PATH" = file.path(root, "config", "dict"))
+library(scales)

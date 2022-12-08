@@ -3,26 +3,11 @@ root <- rprojroot::find_root(rprojroot::has_dir(".git"))
 r_dir <- file.path(root, "r")
 invisible(lapply(list.files(r_dir, full.names = TRUE), source))
 
-# Question 1 - how many unique R's even appear?
-ind <- load_concepts(c("bmi", "death"), "miiv")
-ind[, c(index_var(ind)) := NULL]
-ind <- ind[!is.na(bmi)]
-
-dat <- merge(ind, get_icd(index = "charlson"), all.x = TRUE)
-dat[is.na(death), death := FALSE]
-
-keep_vars <- c("stay_id", "bmi", "death")
-for (col in setdiff(names(dat), keep_vars)) {
-  dat[is.na(get(col)), c(col) := FALSE]
-}
-# cmb <- setdiff(names(dat), keep_vars)
-cmb <- c("CHF", "Pulmonary")#, "LiverSevere", "Renal", "Stroke", "MI")
-
-
-# phi = phi_x = phi_xy
+#' * phi = phi_x = phi_xy *
 res <- list()
-p_range <- seq(0.0, 0.2, 0.05)
+p_range <- seq(0.0, 0.3, 0.03)
 df <- expand.grid(fi = p_range)
+dat <- real_data()
 for (j in seq_len(nrow(df))) {
   
   fixy <- list(list(0, 0), list(0, 0))
@@ -40,7 +25,9 @@ ggplot(df, aes(x = fi, y = adjusted_ATE)) +
   ggtitle(latex2exp::TeX("Basic case: $\\phi = \\phi_{x} = \\phi_{xy}$")) +
   scale_y_continuous(labels = scales::percent)
 
-# phi_x = phi_xy case
+ggsave("~/Desktop/sensitivity.png", width = 6, height = 4)
+
+#' * phi_x = phi_xy case *
 df <- expand.grid(fi_x0 = p_range, fi_x1 = p_range)
 df$adjusted_ATE <- 0
 df$cmb_diff <- 0

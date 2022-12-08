@@ -4,9 +4,9 @@ r_dir <- file.path(root, "r")
 invisible(lapply(list.files(r_dir, full.names = TRUE), source))
 
 kseq <- seq.int(3L, 11L, 4L)
-mcseq <- c(0, 1, 5)
+mcseq <- c(0, 1)#, 5)
 famseq <- c("latent_u")
-seedseq <- seq.int(22L, 24L)
+seedseq <- 22L #seq.int(22L, 24L)
 tail_samp <- c(1L, 10L)
 
 df <- expand.grid(kseq, mcseq, famseq, seedseq, tail_samp, 
@@ -16,7 +16,8 @@ names(df) <- c("dimension", "gibbs", "family", "seed", "tail")
 df$MSE <- df$beta <- df$beta_hat <- df$tail_fluc <- df$tail_error <- 0
 
 niter <- 30L
-for (i in seq_len(nrow(df))) {
+i_target <- 8L # seq_len(nrow(df))
+for (i in i_target) {
   
   aux <- synth_data_mid(n = 10^4, k = df$dimension[i], class = df$family[i],
                         seed = df$seed[i])
@@ -32,25 +33,28 @@ for (i in seq_len(nrow(df))) {
   df$beta[i] <- aux$beta
   df$beta_hat[i] <- tail(fwd$beta, n = 1L)[[1]]
   df$MSE[i] <- abs(aux$beta - tail(fwd$beta, n = 1L)[[1]]) / 0.05
-  df$tail_fluc <- sum(abs(diff(unlist(tail(fwd$beta, n = niter - 10L)))))
-  df$tail_error <- sum(abs(aux$beta - unlist(tail(fwd$beta, n = niter - 10L))))
-  # evl[[i]] <- evl_frm(fwd, aux)
+  df$tail_fluc[i] <- sum(abs(diff(unlist(tail(fwd$beta, n = niter - 10L)))))
+  df$tail_error[i] <- sum(abs(aux$beta - unlist(tail(fwd$beta, n = niter - 10L))))
+  evl[[i]] <- evl_frm(fwd, aux)
   
   cat("\r", i)
 }
-
-x <- rep(0, 10)
-mclapply(seq_along(x), function(i) x[i] <- i, mc.cores = 5L)
 
 # cowplot::plot_grid(
 #   vis_evl(evl[[8]]), vis_evl(evl[[44]]), ncol = 2L,
 #   labels = c("01", "10")
 # )
 
-ggplot(df, aes(x = tail_fluc, y = tail_error, color = factor(tail_samp))) +
-  geom_point() + theme_bw() + 
+ggplot(df, aes(x = tail_fluc, y = tail_error, color = factor(tail))) +
+  geom_point() + theme_bw() +
   scale_color_discrete(name = "Tail Samples")
 
+vis_evl(evl[[8]])
+# 
+bwd <- sensitivity_ATE(fixy, aux$dat)
+
+sum(100 * abs(as.vector(bwd$pz) - aux$pz)) # backward error
+sum(100 * abs(as.vector(fwd$pz[[niter]]) - aux$pz)) # forward error
 
 
 #' * Umap of P(z) * 

@@ -1,5 +1,5 @@
 
-naive_bayes <- function(dat, fi, cmb = setdiff(names(dat), c("bmi", "death"))) {
+naive_bayes <- function(dat, fi, cmb = setdiff(names(dat), c("bmi_bin", "death"))) {
   
   add_cmb <- function(col, bmi_bin, death, fi) {
     
@@ -30,7 +30,7 @@ naive_bayes <- function(dat, fi, cmb = setdiff(names(dat), c("bmi", "death"))) {
   
 } 
 
-spcol_bayes <- function(dat, fi, cmb = setdiff(names(dat), c("bmi", "death"))) {
+spcol_bayes <- function(dat, fi, cmb = setdiff(names(dat), c("bmi_bin", "death"))) {
   
   add_cmb <- function(col, spcol, bmi_bin, death, fi) {
     
@@ -69,7 +69,7 @@ spcol_bayes <- function(dat, fi, cmb = setdiff(names(dat), c("bmi", "death"))) {
   
 } 
 
-model_bayes <- function(dat, fi, cmb = setdiff(names(dat), c("bmi", "death")),
+model_bayes <- function(dat, fi, cmb = setdiff(names(dat), c("bmi_bin", "death")),
                         niter = 1L, pz_ground = NULL, Z_ground = NULL,
                         seed = 22, gibbs = 10, gibbs_slope = 0, tail_samples = 1,
                         display = FALSE) {
@@ -119,7 +119,7 @@ model_bayes <- function(dat, fi, cmb = setdiff(names(dat), c("bmi", "death")),
   enc_mat <- t(replicate(nrow(dat) * length(seed), 2^(seq_along(cmb) - 1L)))
 
   Rt <- lapply(seed, function(x) copy(dat[, c(cmb), with=FALSE]))
-  bmi_bin <- lapply(seed, function(x) dat$bmi > 25)
+  bmi_bin <- lapply(seed, function(x) dat$bmi_bin)
   death <- lapply(seed, function(x) dat$death)
   
   Ui <- do.call(rbind, Ui)
@@ -128,12 +128,12 @@ model_bayes <- function(dat, fi, cmb = setdiff(names(dat), c("bmi", "death")),
   death <- do.call(c, death)
   
   if (!is.null(Z_ground)) {
-    
+
     Z_ground <- as.data.table(Z_ground)
     Z_ground <- setnames(Z_ground, names(Z_ground), names(Rt))
   }
   
-  thresh <- beta_hat <- nZ_hat <- fit <- adv_acc <- pz <- list()
+  thresh <- beta_hat <- ate_hat <- nZ_hat <- fit <- adv_acc <- pz <- list()
   cnt <- 1L
   for (nit in seq_len(niter)) {
     
@@ -199,12 +199,18 @@ model_bayes <- function(dat, fi, cmb = setdiff(names(dat), c("bmi", "death")),
     num_rep <- nrow(psi_dat) / nrow(Rt)
     assert_that(num_rep == round(num_rep), msg = "Non-integer repetition value.")
     
-    fit <- glm(death ~ ., family = binomial(), 
-               data = cbind(death = rep(death, num_rep), 
-                            psi_dat, 
-                            bmi_bin = rep(bmi_bin, num_rep)))
+    fit_dat <- cbind(death = rep(death, num_rep), psi_dat, 
+                     bmi_bin = rep(bmi_bin, num_rep))
+    fit <- glm(death ~ ., family = binomial(), data = fit_dat)
+    
+    fit_dat$bmi_bin <- FALSE
+    y_b0 <- predict(fit, fit_dat)
+    
+    fit_dat$bmi_bin <- TRUE
+    y_b1 <- predict(fit, fit_dat)
     
     beta_hat[[cnt]] <- fit$coefficients["bmi_binTRUE"]
+    ate_hat[[cnt]] <- mean(y_b1) - mean(y_b0)
     nZ_hat[[cnt]] <- colSums(Z_ground) - colSums(Rt)
     cnt <- cnt + 1
     
@@ -214,6 +220,7 @@ model_bayes <- function(dat, fi, cmb = setdiff(names(dat), c("bmi", "death")),
     pz = pz,
     thresholds = thresh,
     beta = beta_hat,
+    ATE = ate_hat,
     nZ_diff = nZ_hat,
     adverse = adv_acc,
     seed = seed

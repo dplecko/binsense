@@ -1,4 +1,279 @@
 {
+  "death": {
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "DIED",
+          "callback": "anzics_death",
+          "index_var": "HOSP_DS_DTM",
+          "class": "col_itm"
+        }
+      ]
+    }
+  },
+  "age": {
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "AGE",
+          "class": "col_itm"
+        }
+      ]
+    }
+  },
+  "chr_resp": {
+    "target": "id_tbl",
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "CHR_RESP",
+          "class": "col_itm",
+          "callback": "anzics_binary"
+        }
+      ]
+    }
+  },
+  "chr_cvs": {
+    "target": "id_tbl",
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "CHR_CVS",
+          "class": "col_itm",
+          "callback": "anzics_binary"
+        }
+      ]
+    }
+  },
+  "chr_liv": {
+    "target": "id_tbl",
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "CHR_LIV",
+          "class": "col_itm",
+          "callback": "anzics_binary"
+        }
+      ]
+    }
+  },
+  "chr_ren": {
+    "target": "id_tbl",
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "CHR_REN",
+          "class": "col_itm",
+          "callback": "anzics_binary"
+        }
+      ]
+    }
+  },
+  "chr_imun": {
+    "target": "id_tbl",
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "IMMUNDIS",
+          "class": "col_itm",
+          "callback": "anzics_binary"
+        }
+      ]
+    }
+  },
+  "chr_imunrx": {
+    "target": "id_tbl",
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "IMMUNRX",
+          "class": "col_itm",
+          "callback": "anzics_binary"
+        }
+      ]
+    }
+  },
+  "aids": {
+    "target": "id_tbl",
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "AIDS",
+          "class": "col_itm",
+          "callback": "anzics_binary"
+        }
+      ]
+    }
+  },
+  "hep_fail": {
+    "target": "id_tbl",
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "HEPFAIL",
+          "class": "col_itm",
+          "callback": "anzics_binary"
+        }
+      ]
+    }
+  },
+  "lymphoma": {
+    "target": "id_tbl",
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "LYMPHOMA",
+          "class": "col_itm",
+          "callback": "anzics_binary"
+        }
+      ]
+    }
+  },
+  "met_canc": {
+    "target": "id_tbl",
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "METAST",
+          "class": "col_itm",
+          "callback": "anzics_binary"
+        }
+      ]
+    }
+  },
+  "leukaemia": {
+    "target": "id_tbl",
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "LEUKAEM",
+          "class": "col_itm",
+          "callback": "anzics_binary"
+        }
+      ]
+    }
+  },
+  "chr_imunsup": {
+    "target": "id_tbl",
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "IMMUNSUP",
+          "class": "col_itm",
+          "callback": "anzics_binary"
+        }
+      ]
+    }
+  },
+  "cirrhosis": {
+    "target": "id_tbl",
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "CIRRHOS",
+          "class": "col_itm",
+          "callback": "anzics_binary"
+        }
+      ]
+    }
+  },
+  "adm_year": {
+    "target": "id_tbl",
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "IcuAdmitYYYY",
+          "class": "col_itm"
+        }
+      ]
+    }
+  },
+  "apache_iii_diag": {
+    "target": "id_tbl",
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "AP3DIAG",
+          "class": "col_itm"
+        }
+      ]
+    }
+  },
+  "weight": {
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "WEIGHT",
+          "class": "col_itm"
+        }
+      ]
+    }
+  },
+  "height": {
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "HEIGHT",
+          "class": "col_itm"
+        }
+      ]
+    }
+  },
+  "sex": {
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "SEX",
+          "callback": "anzics_sex",
+          "class": "col_itm"
+        }
+      ]
+    }
+  },
+  "apache_iii": {
+    "target": "id_tbl",
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "Apache3Score",
+          "class": "col_itm"
+        }
+      ]
+    }
+  },
+  "apache_iii_risk": {
+    "target": "id_tbl",
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "Apache3RiskOfDeath",
+          "class": "col_itm"
+        }
+      ]
+    }
+  },
   "elix": {
     "description": "No. comorbidities",
     "category": "Misc.",
@@ -71,7 +346,7 @@
     "diag": {
     "target": "id_tbl",
     "levels": ["MED", "SURG", "CMED", "CSURG", "VSURG", "NSURG", "OTH", "NMED", 
-"ORTHO", "TRAUM", "OMED", "TSURG", "GYN"],
+"ORTHO", "TRAUM", "OMED", "TSURG", "GYN", "ENT", "OBS", "PSURG"],
     "class": "fct_cncpt",
     "description": "patient admission type",
     "category": "demographics",
@@ -80,7 +355,7 @@
         {
           "val_var": "specialty",
           "table": "admissions",
-          "callback": "apply_map( c(Cardiochirurgie = 'surg', Cardiologie = 'med', ders = 'other', Gynaecologie = 'other', `Heelkunde Gastro-enterologie` = 'surg', `Heelkunde Longen/Oncologie` = 'surg', `Heelkunde Oncologie` = 'surg', Hematologie = 'med', `Intensive Care Volwassenen` = 'other', Inwendig = 'med', `Keel, Neus & Oorarts` = 'surg', Longziekte = 'med', `Maag-,Darm-,Leverziekten` = 'med', Mondheelkunde = 'surg', Nefrologie = 'med', Neurochirurgie = 'surg', Neurologie = 'med', Obstetrie = 'other', `Oncologie Inwendig` = 'med', Oogheelkunde = 'surg', Orthopedie = 'surg', `Plastische chirurgie` = 'surg', Reumatologie = 'med', Traumatologie = 'surg', Urologie = 'surg', Vaatchirurgie = 'surg', Verloskunde = 'other'))",
+          "callback": "apply_map(c(Cardiochirurgie = 'CSURG', Cardiologie = 'CMED', ders = 'OTH', Gynaecologie = 'GYN', `Heelkunde Gastro-enterologie` = 'SURG', `Heelkunde Longen/Oncologie` = 'SURG', `Heelkunde Oncologie` = 'SURG', Hematologie = 'MED', `Intensive Care Volwassenen` = 'OTH', Inwendig = 'MED', `Keel, Neus & Oorarts` = 'ENT', Longziekte = 'MED', `Maag-,Darm-,Leverziekten` = 'MED', Mondheelkunde = 'PSURG', Nefrologie = 'MED', Neurochirurgie = 'NSURG', Neurologie = 'NMED', Obstetrie = 'OBS', `Oncologie Inwendig` = 'MED', Oogheelkunde = 'OTH', Orthopedie = 'ORTHO', `Plastische chirurgie` = 'PSURG', Reumatologie = 'MED', Traumatologie = 'TRAUM', Urologie = 'MED', Vaatchirurgie = 'VSURG', Verloskunde = 'OTH'))",
           "class": "col_itm"
         }
       ],
@@ -88,7 +363,7 @@
         {
           "table": "admissiondx",
           "val_var": "admitdxpath",
-          "callback": "eicu_adx",
+          "callback": "eicu_diag",
           "class": "col_itm"
         }
       ],
@@ -96,7 +371,7 @@
         {
           "table": "admissiondx",
           "val_var": "admitdxpath",
-          "callback": "eicu_adx",
+          "callback": "eicu_diag",
           "class": "col_itm"
         }
       ],
