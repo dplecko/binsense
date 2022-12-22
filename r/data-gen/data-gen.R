@@ -38,28 +38,25 @@ synth_data <- function(n = 10^5, pz = c(0.5, 0.1, 0.1, 0.3), k = 2, seed = 22) {
 }
 
 synth_data_mid <- function(n = 10^4, k = 5, seed = 22,
-                           class = c("latent_u", "2nd_order_exp")) {
+                           class = c("latent_u", "1D", "2D")) {
   
   
-  class <- match.arg(class, c("latent_u", "2nd_order_exp"))
+  class <- match.arg(class, c("latent_u", "1D", "2D"))
   assertthat::assert_that(class %in% c("latent_u", "2nd_order_exp"),
                           msg = "Unknown model class specified.")
   
   set.seed(seed)
   fi <- 0.3
   
+  switch (class,
+    
+  )
+  
   if (class == "latent_u") {
     
-    u <- runif(n)
-    ulam <- rep(1/4, 5)
     
-    Z <- c()
-    for (i in seq_len(k)) {
-      
-      Z <- cbind(Z, rbinom(n, 1, prob = expit(ulam * u - 1)))
-    }
     
-  } else if (class == "2nd_order_exp") {
+  } else if (class == "1D") {
     
     pz <- rep(0, 2^k)
     sig <- runif(k) - 2 / 3
@@ -77,6 +74,9 @@ synth_data_mid <- function(n = 10^4, k = 5, seed = 22,
     Z <- lapply(Z, function(z) as.integer(intToBits(z-i)[seq_len(k)]))
     Z <- do.call(rbind, Z)
     
+  } else if (class == "2D") {
+    
+    Z <- z_2d(k = k, n_samp = 10)
   }
   
   lam <- -rep(2/3, k) # comorbidities make obesity less likely!
@@ -150,4 +150,7 @@ real_data <- function(src = c("miiv", "mimic_demo")) {
   dat <- setnames(dat, cmb, paste("cmb", seq_along(cmb), sep = "_"))
   dat
 }
+
+
+
 

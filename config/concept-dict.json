@@ -336,6 +336,13 @@
     "class": "rec_cncpt",
     "target": "id_tbl"
   },
+  "is_mv": {
+    "concepts": ["mech_vent"],
+    "description": "Mechanically Ventilated during stay",
+    "callback": "ismv_cb",
+    "class": "rec_cncpt",
+    "target": "id_tbl"
+  },
   "acu_24": {
     "concepts": ["sofa"],
     "description": "SOFA at 24 hours",

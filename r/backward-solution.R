@@ -44,7 +44,7 @@ sensitivity_ATE <- function(fi, dat, order = Inf, verbose = FALSE) {
       
       pr[[x + 1]][[y + 1]] <- cprxy
       
-      A[[x + 1]][[y + 1]] <- A_xy(fi_xy = fi[[x + 1]][[y + 1]], k = k)
+      A[[x + 1]][[y + 1]] <- cpp_A_xy(fi_xy = fi[[x + 1]][[y + 1]], k = k)
       
       if (any(A[[x + 1]][[y + 1]] < 0) | any(A[[x + 1]][[y + 1]] < 0)) 
         return(list(ATE = NA, cmb_diff = NA))
@@ -69,7 +69,7 @@ sensitivity_ATE <- function(fi, dat, order = Inf, verbose = FALSE) {
       # max(abs(solve(A[[x + 1]][[y + 1]]) - A_inv)) (works!)
       
       # B represents P(z | r, x, y)
-      B[[x + 1]][[y + 1]] <- invert_A_xy(A[[x + 1]][[y + 1]], 
+      B[[x + 1]][[y + 1]] <- cpp_invert_A_xy(A[[x + 1]][[y + 1]], 
                                          pz[[x + 1]][[y + 1]], 
                                          pr[[x + 1]][[y + 1]])
       

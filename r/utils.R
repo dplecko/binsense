@@ -17,3 +17,9 @@ srcwrap <- function(src) {
          stop("unknown data source")
   )
 }
+
+n_cores <- function() {
+  as.integer(
+    Sys.getenv("LSB_DJOB_NUMPROC", unset = parallel::detectCores() / 2L)
+  )
+}

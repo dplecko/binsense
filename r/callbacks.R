@@ -1,4 +1,10 @@
 
+ismv_cb <- function(mech_vent, ...) {
+
+  mech_vent <- mech_vent[, .N, by = c(id_vars(mech_vent))]
+  mech_vent[, is_mv := N > 0]
+  mech_vent[, N := NULL]
+}
 
 anzics_binary <- function(x, val_var, ...) {
   

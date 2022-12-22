@@ -3,10 +3,10 @@ root <- rprojroot::find_root(rprojroot::has_dir(".git"))
 r_dir <- file.path(root, "r")
 invisible(lapply(list.files(r_dir, full.names = TRUE), source))
 
-kseq <- seq.int(2L, 8L, 1L)
+kseq <- seq.int(2L, 8L, 6L)
 famseq <- c("latent_u")
-seedseq <- seq.int(22L, 25L)
-niter <- 20L
+seedseq <- seq.int(22L, 22L)
+niter <- 10L
 
 df <- expand.grid(kseq, famseq, seedseq, stringsAsFactors = FALSE)
 names(df) <- c("dimension", "family", "seed")
@@ -14,7 +14,7 @@ df$fMSE <- df$bMSE <- df$ate <- df$ate_fhat <-  df$ate_bhat <- df$pz_ferr <- df$
 
 i_range <- seq_len(nrow(df))
 evl <- list()
-for (i in i_range) {
+for (i in i_range) { 
   
   aux <- synth_data_mid(n = 10^4, k = df$dimension[i], class = df$family[i],
                         seed = df$seed[i])
@@ -39,7 +39,7 @@ for (i in i_range) {
   cat("\r", i)
 }
 
-# p1 <- ggplot(df, aes(x = dimension, y = MSE)) +
+# p1 <- ggplot(df, aes(x = dimension, y = bMSE)) +
 #   geom_point() + theme_bw() + ylab("ATE error") + ggtitle("ATE error") +
 #   geom_smooth()
 # 

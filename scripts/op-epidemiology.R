@@ -1,14 +1,8 @@
-library(ricu)
-library(icd)
-library(ranger)
-library(latex2exp)
-library(ggplot2)
-library(stringr)
 
 root <- rprojroot::find_root(rprojroot::has_dir(".git"))
 r_dir <- file.path(root, "r")
 invisible(lapply(list.files(r_dir, full.names = TRUE), source))
-Sys.setenv("RICU_CONFIG_PATH" = file.path(root, "config", "dict"))
+Sys.setenv("RICU_CONFIG_PATH" = file.path(root, "config"))
 
 src <- "miiv"
 pids <- id_col(load_concepts(c("bmi"), "miiv")[bmi > 18.5])
