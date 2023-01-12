@@ -1,26 +1,28 @@
 
 root <- rprojroot::find_root(rprojroot::has_file(".gitignore"))
 r_dir <- file.path(root, "r")
-invisible(lapply(list.files(r_dir, full.names = TRUE), source))
-
+invisible(lapply(list.files(r_dir, full.names = TRUE, recursive = TRUE), source))
 
 src <- c("miiv", "aumc", "hirid", "anzics")
 plt <- list()
 for (dsrc in src) {
   
-  dat <- load_data(dsrc)
+  dat <- load_data(dsrc, anzics_diag_subset = "add")
   mod_uni <- fit_log(dat, "univar")
-  mod_mul <- fit_log(dat, "multivar")
+  # mod_mul <- fit_log(dat, "multivar")
+  mod_man <- fit_log(dat, "manual")
   
   plt[[dsrc]] <- cowplot::plot_grid(
     plot_or(mod_uni) + ggtitle(paste(srcwrap(dsrc), "univariate")), 
-    plot_or(mod_mul) + ggtitle(paste(srcwrap(dsrc), "multivariate"))
+    # plot_or(mod_mul) + ggtitle(paste(srcwrap(dsrc), "multivariate")),
+    plot_or(mod_man) + ggtitle(paste(srcwrap(dsrc), "manual"))
   )
 }
 
 cowplot::plot_grid(plotlist = plt, nrow = length(plt))
 
-ggsave(file.path(root, "results", "sex-impact-with-age.png"), width = 10, height = 14)
+ggsave(file.path(root, "results", "sex-impact-with-age.png"), width = 10, 
+       height = 14)
 
 #' * differential impact of sex *
 #
@@ -59,8 +61,9 @@ ggsave(file.path(root, "results", "sex-impact-with-age.png"), width = 10, height
 #   theme(legend.position = c(0.8, 0.8),
 #         legend.box.background = element_rect()) + ggtitle("All patients")
 # 
-# height_male <- ggplot(dat[sex == "Male", list(mean(death), .N), by = c("height_bin_m", "bmi_bin")],
-#                       aes(x = bmi_bin, y = V1, color = height_bin_m, fill = height_bin_m)) +
+# height_male <- ggplot(
+#   dat[sex == "Male", list(mean(death), .N), by = c("height_bin_m", "bmi_bin")],
+#   aes(x = bmi_bin, y = V1, color = height_bin_m, fill = height_bin_m)) +
 #   geom_point() + geom_line() +
 #   geom_ribbon(aes(ymin = V1 - 1.96 * V1 * (1-V1) / sqrt(N),
 #                   ymax = V1 + 1.96 * V1 * (1-V1) / sqrt(N)), alpha = 0.4) +

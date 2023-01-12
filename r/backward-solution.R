@@ -70,8 +70,8 @@ sensitivity_ATE <- function(fi, dat, order = Inf, verbose = FALSE) {
       
       # B represents P(z | r, x, y)
       B[[x + 1]][[y + 1]] <- cpp_invert_A_xy(A[[x + 1]][[y + 1]], 
-                                         pz[[x + 1]][[y + 1]], 
-                                         pr[[x + 1]][[y + 1]])
+                                             pz[[x + 1]][[y + 1]], 
+                                             pr[[x + 1]][[y + 1]])
       
       
       if (check_simplex(pz[[x + 1]][[y + 1]])) {
