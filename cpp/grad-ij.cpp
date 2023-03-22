@@ -1,4 +1,5 @@
 #include <Rcpp.h>
+// #include <bits/stdc++.h>
 using namespace Rcpp;
 
 // [[Rcpp::export]]
@@ -81,8 +82,6 @@ NumericVector cpp_grad_ij(NumericVector rhash, int i, int j, int k, double fi,
     idx_sum = 0; tot_sum = 0;
     for (int y = 0; y < idx.length(); ++y) {
 
-      // Rcout<<y<<idx(y)<<fi_wgh_hash(y)<<pz(y)<<std::endl;
-
       if (idx(y)) idx_sum += fi_wgh_hash(y) * pz(y);
       tot_sum += fi_wgh_hash(y) * pz(y);
     }
@@ -91,4 +90,100 @@ NumericVector cpp_grad_ij(NumericVector rhash, int i, int j, int k, double fi,
   }
 
   return grad_ij;
+}
+
+// [[Rcpp::export]]
+NumericVector cpp_scaling_2d(NumericMatrix Sigma) {
+  
+  int k = Sigma.ncol(); int pz_dim = 1;
+  for (int i = 0; i < k; ++i) pz_dim *= 2;
+  NumericVector pz(pz_dim);
+  
+  for (int i = 0; i < pz_dim; ++i) {
+    
+    for (int ki = 0; ki < k; ++ki) {
+      
+      for (int kj = 0; kj < k; ++kj) {
+        
+        pz(i) += Sigma(ki, kj) * ((i & (1<<ki)) > 0) * ((i & (1<<kj)) > 0);
+      }
+    }
+    
+    pz(i) = exp(pz(i));
+  }
+  
+  return pz;
+}
+
+// [[Rcpp::export]]
+NumericMatrix cpp_hessian_2d_degenerate(NumericVector pz, int p) {
+  
+  NumericMatrix hess(p * p, p * p);
+  double eij, ekl, eijkl;
+  int i, j, k, l;
+  
+  for (int x = 0; x < p*p; ++x) {
+
+    for (int y = 0; y < p*p; ++y) {
+
+      i = x / p;
+      j = x % p;
+      k = y / p;
+      l = y % p;
+      // std::cout<<i<<" "<<j<<" "<<k<<" "<<l<<std::endl;
+      eij = 0, ekl = 0, eijkl = 0;
+      
+      for (int dim = 0; dim < pz.length(); ++dim) {
+        
+        // std::cout<<(1<<i & dim) * ((1<<j & dim) > 0) * pz(dim)<<std::endl;
+        eij += ((1<<i & dim) > 0) * ((1<<j & dim) > 0) * pz(dim);
+        ekl += ((1<<k & dim) > 0) * ((1<<l & dim) > 0) * pz(dim);
+        eijkl += ((1<<i & dim) > 0) * ((1<<j & dim) > 0) * ((1<<k & dim) > 0) * ((1<<l & dim) > 0) * pz(dim);
+      }
+
+      hess(x, y) = eijkl - eij * ekl;
+      // std::cout<<x<<" "<<y<<std::endl;
+    }
+  }
+  
+  return hess;
+}
+
+// [[Rcpp::export]]
+NumericMatrix cpp_hessian_2d(NumericVector pz, IntegerVector idx, int p) {
+  
+  NumericMatrix hess(idx.length(), idx.length());
+  double eij, ekl, eijkl;
+  int i, j, k, l;
+  
+  for (int x = 0; x < idx.length(); ++x) {
+    
+    for (int y = 0; y < idx.length(); ++y) {
+      
+      i = (idx(x) / p);
+      j = idx(x) % p;
+      k = idx(y) / p;
+      l = idx(y) % p;
+      // std::cout<<i<<" "<<j<<" "<<k<<" "<<l<<std::endl;
+      eij = 0, ekl = 0, eijkl = 0;
+      
+      for (int dim = 0; dim < pz.length(); ++dim) {
+        
+        // std::cout<<(1<<i & dim) * ((1<<j & dim) > 0) * pz(dim)<<std::endl;
+        eij += ((1<<i & dim) > 0) * ((1<<j & dim) > 0) * pz(dim);
+        ekl += ((1<<k & dim) > 0) * ((1<<l & dim) > 0) * pz(dim);
+        eijkl += ((1<<i & dim) > 0) * ((1<<j & dim) > 0) * ((1<<k & dim) > 0) * ((1<<l & dim) > 0) * pz(dim);
+      }
+      
+      // if (x == 0 & y == 0) {
+      //   std::cout<<i<<" "<<j<<std::endl;
+      //   // std::cout<<(1 + i!=j)<<" "<<(1 + k!=l)<<std::endl;
+      //   std::cout<<eij<<" "<<ekl<<" "<<eijkl<<std::endl;
+      // }
+      hess(x, y) = (eijkl - eij * ekl) * (1 + (i!=j)) * (1 + (k!=l));
+      // std::cout<<x<<" "<<y<<std::endl;
+    }
+  }
+  
+  return hess;
 }

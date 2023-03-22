@@ -65,7 +65,7 @@ compute_grad_ij_old <- function(i, j, r, pz, fi, mode = "cpp") {
   mean(k_grad_ij)
 }
 
-compute_grad_ij <- function(i, j, r, pz, fi, mc_cores = n_cores()) {
+compute_grad_ij <- function(i, j, r, pz, fi, mc_cores = 1L) {
   
   k <- as.integer(log(length(pz), 2))
   
@@ -95,9 +95,17 @@ compute_grad_ij <- function(i, j, r, pz, fi, mc_cores = n_cores()) {
   mean(k_grad_ij)
 }
 
+compute_grad_logc_ij <- function(i, j, pz) {
+  
+  dim <- as.integer(log(length(pz), 2))
+  idx <- cpp_idx(1, i, j, dim)
+  (1 + (i != j)) * 1 / sum(pz) * sum(pz[idx])
+}
+
 likelihood_2d <- function(Sigma, r, fi, mode = "cpp") {
   
-  pz <- scaling_2d(Sigma)
+  if (fi == 0) return(likelihood_2d_fi0(Sigma, r))
+  pz <- cpp_scaling_2d(Sigma)
   pz <- pz / sum(pz)
   
   k <- as.integer(log(length(pz), 2))
@@ -124,16 +132,10 @@ likelihood_2d <- function(Sigma, r, fi, mode = "cpp") {
   
 }
 
-compute_grad_logc_ij <- function(i, j, pz) {
-  
-  dim <- as.integer(log(length(pz), 2))
-  idx <- cpp_idx(1, i, j, dim)
-  (1 + (i != j)) * 1 / sum(pz) * sum(pz[idx])
-}
-
 gradient_2d <- function(Sigma, r, fi) {
   
-  pz <- scaling_2d(Sigma)
+  if (fi == 0) return(gradient_2d_fi0(Sigma, r))
+  pz <- cpp_scaling_2d(Sigma)
   pz <- pz / sum(pz)
   grad <- array(0, dim = dim(Sigma))
   k <- ncol(Sigma)
@@ -151,34 +153,287 @@ gradient_2d <- function(Sigma, r, fi) {
   grad
 }
 
-descent_2d <- function(Sigma0, r, fi, gamma = 1, n_iter = 50, 
-                       true_Sigma = NULL, verbose = FALSE) {
+descent_2d <- function(Sigma0, r, fi, gamma = 1, n_iter = 50, true_Sigma = NULL,
+                       verbose = FALSE, 
+                       type = c("vanishing", "normalized", "backtracking", 
+                                "RMSprop", "Rprop", "Newton-Raphson"),
+                       eps = 10^(-log(nrow(r), 10) - 2)) {
   
-  Sigma_dist <- loglc <- rep(0, n_iter)
-  Sigma <- list()
+  type <- match.arg(type, c("vanishing", "normalized", "backtracking", 
+                            "RMSprop", "Rprop", "Newton-Raphson"))
+  Sigma_dist <- loglc <- cor <- alpha <- gsc <- rep(0, n_iter)
+  Sigma <- grads <- list()
   Sigma[[1]] <- Sigma0
+  t_init <- 1
+  beta <- 3 / 4
   
   loglc[1] <- likelihood_2d(Sigma[[1]], r, fi)
   if (!is.null(true_Sigma)) Sigma_dist[1] <- sum((Sigma[[1]] - true_Sigma)^2)
+  gamma_i <- gamma
   
+  if (ncol(Sigma0) == 2L & !is.null(true_Sigma)) {
+    Sigma_mome <- k2_solver(r, fi)
+  } else Sigma_mome <- NULL
+  # cat("Iter:")
   for (i in seq.int(2, n_iter)) {
     
-    step_targ <- gamma / (1 + i)
+    # compute gradient
     curr_grad <- gradient_2d(Sigma[[i-1]], r, fi)
+    grads[[i]] <- curr_grad
     
-    if (!is.null(true_Sigma)) perf_grad <- true_Sigma - Sigma[[i-1]]
+    if (!is.null(true_Sigma)) gsc[i] <- nabq_gamma(true_Sigma, Sigma[[i-1]], fi)
     
+    # determine step size
+    if (type == "vanishing") {
+      
+      gamma_i <- gamma / (1 + i)
+    } else if (type == "normalized") {
+      
+      gamma_i <- gamma / (vec_norm(curr_grad) * (1 + i))
+    } else if (type == "backtracking") {
+      # cat("Backtracking in iteration", i, "\n")
+      tuned <- FALSE
+      
+      Sigma_cand <- Sigma[[i-1]] + gamma_i * curr_grad
+      Delta <- likelihood_2d(Sigma_cand, r, fi) - loglc[i - 1]
+      
+      if (Delta < 0) {
+        
+        while (Delta < 0) {
+          
+          gamma_i <- gamma_i / 2
+          Sigma_cand <- Sigma[[i-1]] + gamma_i * curr_grad
+          Delta <- likelihood_2d(Sigma_cand, r, fi) - loglc[i - 1]
+        }
+      } else if (Delta < gamma_i * 1 / 8 * vec_norm(curr_grad)^2) {
+        
+        while (Delta < gamma_i * 1 / 8 * vec_norm(curr_grad)^2) {
+          
+          gamma_i <- gamma_i * 2
+          Sigma_cand <- Sigma[[i-1]] + gamma_i * curr_grad
+          Delta <- likelihood_2d(Sigma_cand, r, fi) - loglc[i - 1]
+          if (Delta < 0) break
+        }
+        if (Delta < 0) gamma_i <- gamma_i / 2
+      } else gamma_i <- gamma_i # / 2
+      
+    } else if (type == "RMSprop") {
+      
+      if (i == 2) {
+        
+        vt <- vec_norm(curr_grad)^2
+      } else {
+        
+        vt <- beta * vt + (1 - beta) * vec_norm(curr_grad)^2
+      }
+      gamma_i <- gamma / sqrt(vt)
+    } else if (type == "Rprop") {
+      
+      if (i > 2) {
+        
+        if (cor(as.vector(curr_grad), as.vector(grads[[i-1]])) < 0) {
+          
+          gamma_i <- gamma_i / 2
+        } else if (cor(as.vector(curr_grad), as.vector(grads[[i-1]])) > 0.5) {
+          
+          gamma_i <- gamma_i * 2
+        }
+      }
+      
+      Sigma_cand <- Sigma[[i-1]] + gamma_i * curr_grad
+      Delta <- likelihood_2d(Sigma_cand, r, fi) - loglc[i - 1]
+      
+      if (Delta < 0) {
+        
+        while (Delta < 0) {
+          
+          gamma_i <- gamma_i * 1 / 2
+          Sigma_cand <- Sigma[[i-1]] + gamma_i * curr_grad
+          Delta <- likelihood_2d(Sigma_cand, r, fi) - loglc[i - 1]
+        }
+      }
+    } else if (type == "Newton-Raphson") {
+      
+      Sigma_comp <- Sigma[[i-1]][!upper.tri(Sigma[[i-1]])]
+      pz <- cpp_scaling_2d(Sigma[[i-1]])
+      # compute the Hessian matrix
+      Hess <- cpp_hessian_2d(pz / sum(pz), which(!upper.tri(Sigma[[i-1]]))-1, 
+                             ncol(Sigma[[i-1]]))
+      
+      update <- tryCatch(
+        solve(Hess, curr_grad[!upper.tri(curr_grad)]),
+        error = function(e) e
+      )
+      
+      if (inherits(update, "error")) {
+        
+        cat("Hessian singular, moving to simple gradients\n")
+        Sigma_cand <- Sigma[[i-1]] + gamma_i * curr_grad
+        Delta <- likelihood_2d(Sigma_cand, r, fi) - loglc[i - 1]
+        
+        if (Delta < 0) {
+          
+          gamma_i <- gamma / 2
+          while (Delta < 0) {
+            
+            gamma_i <- gamma_i * 1 / 2
+            Sigma_cand <- Sigma[[i-1]] + gamma_i * curr_grad
+            Delta <- likelihood_2d(Sigma_cand, r, fi) - loglc[i - 1]
+            
+            if (gamma_i < 10^(-16)) {
+              
+              cat("No update in direction of gradient\n")
+              break
+            }
+          }
+        }
+
+        Sigma[[i]] <- Sigma_cand
+      } else {
+        
+        # cat(cor(update, curr_grad[!upper.tri(curr_grad)]), "\n")
+        
+        Sigma_pf <- function(Sigma_comp, update) {
+          
+          Sigma_comp <- Sigma_comp + update
+          
+          Sigma_pf <- Sigma[[i-1]]
+          Sigma_pf[, ] <- 0
+          Sigma_pf[!upper.tri(Sigma_pf)] <- Sigma_comp
+          
+          Sigma_pf <- (Sigma_pf + t(Sigma_pf))
+          diag(Sigma_pf) <- diag(Sigma_pf) / 2
+          
+          Sigma_pf
+        }
+        
+        halving <- 1
+        Delta <- likelihood_2d(Sigma_pf(Sigma_comp, update), r, fi) - loglc[i - 1]
+        while (Delta < 0) {
+          # browser()
+          halving <- halving * 2
+          Delta <- likelihood_2d(Sigma_pf(Sigma_comp, update/halving), r, fi) - 
+            loglc[i - 1]
+        }
+        Sigma[[i]] <- Sigma_pf(Sigma_comp, update/halving)
+        # cat("Halving =", halving, "\n")
+        # cat(i)
+      }
+    }
     
-    gamma_i <- step_targ / vec_norm(curr_grad)
+    if (!is.null(true_Sigma)) {
+      
+      a <- Sigma[[i-1]]
+      b <- a + gamma_i * curr_grad
+      c <- true_Sigma
+      
+      lambda_proj <- sum((c - a) * (b - a)) / vec_norm(b - a)
+      cor[[i]] <- sum((c - a) * (b - a)) / (vec_norm(b - a) * vec_norm(c - a))
+      alpha[[i]] <- lambda_proj / vec_norm(b - a)
+    }
     
-    Sigma[[i]] <- Sigma[[i-1]] + gamma_i * curr_grad
+    if (type != "Newton-Raphson") Sigma[[i]] <- Sigma[[i-1]] + gamma_i * curr_grad
     
     loglc[i] <- likelihood_2d(Sigma[[i]], r, fi)
+    
+    Delta <- loglc[i] - loglc[i-1]
     
     if (!is.null(true_Sigma)) Sigma_dist[i] <- sum((Sigma[[i]] - true_Sigma)^2)
     
     if (verbose) cat("Log(L_c) =", loglc[i], "\n")
+    
+    cat(log(Delta, 10), "\n")
+    # if (Delta < eps) break
+    if (log(Delta, 10) < -15) break
   }
   
-  list(Sigma = Sigma, Sigma_dist = Sigma_dist, loglc = loglc)
+  if (!is.null(true_Sigma)) {
+    loglc_true <- likelihood_2d(true_Sigma, r, fi)
+    if (!is.null(Sigma_mome)) {
+      mome_llc <- likelihood_2d(Sigma_mome, r, fi)
+    } else mome_llc <- NA
+  } else {
+    loglc_true <- NA
+    mome_llc <- NA
+  }
+  
+  list(Sigma = Sigma[seq_len(i)], Sigma_dist = Sigma_dist[seq_len(i)], 
+       loglc = loglc[seq_len(i)], loglc_true = loglc_true, 
+       cor = cor[seq_len(i)], alpha = alpha[seq_len(i)],
+       gsc = gsc[seq_len(i)],
+       mome_llc = mome_llc)
+}
+
+vis_descent_2d <- function(object, iter_subset = TRUE) {
+  
+  df <- data.frame(Sigma_dist = object[["Sigma_dist"]], 
+                   loglc = object[["loglc"]],
+                   cor = object[["cor"]],
+                   alpha = object[["alpha"]],
+                   gsc = object[["gsc"]],
+                   iter = seq_along(object[["Sigma"]]))
+  df <- df[iter_subset, ]
+  df <- reshape2::melt(df, id.vars = "iter")
+  dummy2 <- data.frame(variable = c("Sigma_dist", "loglc", "cor", "alpha", 
+                                    "loglc"), 
+                       Z = c(0, object$loglc_true, 1, 1, object$mome_llc),
+                       clr = c(1, 1, 1, 1, 2))
+
+  ggplot(df, aes(x = iter, y = value)) +
+    geom_point() + geom_line() + theme_bw() +
+    facet_wrap(vars(variable), scales = "free_y") +
+    geom_hline(data = dummy2, aes(yintercept = Z, color = factor(clr),
+                                  linetype = factor(clr)), 
+               linewidth=0.5)
+}
+
+k2_solver <- function(R, fi) {
+  
+  p11 <- mean(R[,1] == 1 & R[,2] == 1)
+  p01 <- mean(R[,1] == 0 & R[,2] == 1)
+  p10 <- mean(R[,1] == 1 & R[,2] == 0)
+  p00 <- 1 - p11 - p01 - p10
+  
+  b2d <- -log(p10 / p11 * (1-fi) - fi)
+  b2a <- -log(p01 / p11 * (1-fi) - fi)
+  
+  a2bd <- -log ( (1-fi)^2 * p00/p11 - fi * exp(- b2d) - fi * exp(- b2a) -
+                   fi^2)
+  
+  a <- a2bd - b2d
+  d <- a2bd - b2a
+  b <- (a2bd - a - d) / 2
+  
+  matrix(c(a, b, b, d), ncol = 2L)
+}
+
+nabq_gamma <- function(Sigma_s, Sigma_c, fi) {
+  
+  Sigma_norm <- function(Sigma) vec_norm(Sigma[!lower.tri(Sigma)])
+  
+  k <- ncol(Sigma_s)
+  rhash_all <- seq_len(2^k)
+  
+  pz_s <- cpp_scaling_2d(Sigma_s)
+  pz_s <- pz_s / sum(pz_s)
+  
+  pz_c <- cpp_scaling_2d(Sigma_c)
+  pz_c <- pz_c / sum(pz_c)
+  
+  A <- do.call(rbind, lapply(rhash_all, function(ri) cpp_fi_hash(ri, fi, k)))
+  pr <- as.vector(A %*% pz_s)
+  
+  grad_diff <- Sigma_s
+  grad_diff[,] <- 0
+  for (j in seq.int(1, k)) {
+    
+    for (l in seq.int(j, k)) {
+      
+      ex_zrts <- cpp_grad_ij(rhash_all, j, l, k, fi, pz_s)
+      ex_zrtc <- cpp_grad_ij(rhash_all, j, l, k, fi, pz_c)
+      grad_diff[j, l] <- sum( (ex_zrts - ex_zrtc) * pr )
+    }
+  }
+  
+  Sigma_norm(grad_diff) / Sigma_norm(Sigma_s - Sigma_c)
 }

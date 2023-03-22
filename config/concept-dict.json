@@ -23,6 +23,18 @@
       ]
     }
   },
+  "site": {
+    "target": "id_tbl",
+    "sources": {
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "SiteID",
+          "class": "col_itm"
+        }
+      ]
+    }
+  },
   "chr_resp": {
     "target": "id_tbl",
     "sources": {

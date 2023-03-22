@@ -1,10 +1,19 @@
 
 #' * 2d exponential family generators *
-gen_Sigma <- function(k) {
+gen_Sigma <- function(k, adv = FALSE) {
   
   Sigma <- array(runif(k^2, -1, 1), dim = c(k, k))
   
-  1 / 2 * (Sigma + t(Sigma))
+  Sigma[upper.tri(Sigma)] <- 0
+  
+  if (adv) {
+    
+    Sigma[!(upper.tri(Sigma)) & !(lower.tri(Sigma))] <- 0
+    Sigma <- Sigma * sign(Sigma)
+    Sigma <- t(t(Sigma) * (-1)^(2:(k+1)))
+  }
+  
+  (Sigma + t(Sigma) * upper.tri(t(Sigma)))
 }
 
 scaling_2d <- function(Sigma) {
@@ -23,19 +32,24 @@ scaling_2d <- function(Sigma) {
   pz
 }
 
-z_2d <- function(k, n_samp, seed = 2022, Sigma = NULL) {
+z_2d <- function(k, n_samp, seed = 2022, Sigma = NULL, mode = "cpp",
+                 Sigma_adv = FALSE) {
   
   set.seed(seed)
   
   if (is.null(Sigma)) {
     
-    Sigma <- gen_Sigma(k)
+    Sigma <- gen_Sigma(k, adv = Sigma_adv)
   } else {
     
     k <- ncol(Sigma)
   }
   
-  pz <- scaling_2d(Sigma)
+  if (mode == "cpp") {
+    pz <- scaling_2d(Sigma)
+  } else {
+    pz <- cpp_scaling_2d(Sigma)
+  }
   
   z <- sample.int(2^k, size = n_samp, prob = pz, replace = TRUE)
   
@@ -46,9 +60,9 @@ z_2d <- function(k, n_samp, seed = 2022, Sigma = NULL) {
   z
 }
 
-r_2d <- function(k, n_samp, fi, seed = 2022) {
+r_2d <- function(k, n_samp, fi, Sigma = NULL, seed = 2022) {
   
-  z <- z_2d(k, n_samp, seed)
+  z <- z_2d(k, n_samp, seed, Sigma = Sigma)
   
   mask <- array(rbinom(k * n_samp, 1, 1-fi), dim = dim(z))
   

@@ -1,15 +1,19 @@
 
 binsensate <- function(X, Y, R, fi, 
-                       solver = c("backward", "expfam-1d", "expfam-2d"),
-                       mc_samples = 10^4, ...) {
+                       solver = c("backward", "expfam-1d", "expfam-2d",
+                                  "expfam-1d-direct", "backward-direct"),
+                       mc_samples = 10^4, ret_em = FALSE, ...) {
   
-  solver <- match.arg(solver, c("backward", "expfam-1d", "expfam-2d"))
+  solver <- match.arg(solver, c("backward", "expfam-1d", "expfam-2d", 
+                                "expfam-1d-direct", "backward-direct"))
   
   switch(
     solver,
     backward = backward_solver(X, Y, R, fi, ...),
     `expfam-1d` = expfam_1d_solver(X, Y, R, fi, mc_samples),
-    `expfam-2d` = expfam_2d_solver(X, Y, R, fi, mc_samples)
+    `expfam-2d` = expfam_2d_solver(X, Y, R, fi, mc_samples, ret_em = ret_em),
+    `expfam-1d-direct` = expfam_1d_direct(X, Y, R, fi, mc_samples),
+    `backward-direct` = backward_solver(X, Y, R, fi, direct = TRUE, ...)
   )
 }
 
@@ -23,12 +27,9 @@ expfam_1d_solver <- function(X, Y, R, fi, mc_samples) {
     for (y in c(0, 1)) {
       
       idx <- X == x & Y == y
-      
-      R[idx, , drop = FALSE]
-      
       em[[1+x]][[1+y]] <- descent_1d(rep(0, ncol(R)), R[idx, , drop = FALSE], 
-                       fi = fi[[1+x]][[1+y]],
-                       gamma = 10, n_iter = 100)
+                                     fi = fi[[1+x]][[1+y]],
+                                     gamma = 10, n_iter = 10)
       
       lambda[[1+x]][[1+y]] <- tail(em[[1+x]][[1+y]]$lambda, n = 1L)[[1]] 
                             # aux$lxy[[1+x]][[1+y]]
@@ -45,9 +46,35 @@ expfam_1d_solver <- function(X, Y, R, fi, mc_samples) {
   logreg_ATE(X_mc, Y_mc, Z_mc, weights)
 }
 
-expfam_2d_solver <- function(X, Y, R, fi, mc_samples) {
+expfam_1d_direct <- function(X, Y, R, fi, mc_samples) {
   
-  Sigma <- list(list(NULL, NULL), list(NULL, NULL))
+  lambda <- list(list(NULL, NULL), list(NULL, NULL))
+  Z_mc <- X_mc <- Y_mc <- weights <- NULL
+  
+  for (x in c(0, 1)) {
+    
+    for (y in c(0, 1)) {
+      
+      idx <- X == x & Y == y
+      lambda[[1+x]][[1+y]] <- logit(
+        colMeans(R[idx, , drop = FALSE]) / (1 -  fi[[1+x]][[1+y]])
+      )
+      
+      # get Monte Carlo samples of Z
+      Z_mc <- rbind(Z_mc, z_1d(lambda = lambda[[1+x]][[1+y]], 
+                               n_samp = mc_samples))
+      X_mc <- c(X_mc, rep(x, mc_samples))
+      Y_mc <- c(Y_mc, rep(y, mc_samples))
+      weights <- c(weights, rep(sum(idx) / nrow(R), mc_samples))
+    }
+  }
+  
+  logreg_ATE(X_mc, Y_mc, Z_mc, weights)
+}
+
+expfam_2d_solver <- function(X, Y, R, fi, mc_samples, ret_em = FALSE) {
+  
+  Sigma <- em_obj <- list(list(NULL, NULL), list(NULL, NULL))
   Z_mc <- X_mc <- Y_mc <- weights <- NULL
   
   for (x in c(0, 1)) {
@@ -56,12 +83,25 @@ expfam_2d_solver <- function(X, Y, R, fi, mc_samples) {
       
       idx <- X == x & Y == y
       
-      R[idx, , drop = FALSE]
+      Rxy <- R[idx, , drop = FALSE]
+      fixy <- fi[[1+x]][[1+y]]
       
-      em <- descent_2d(array(0, dim = c(ncol(R), ncol(R))), 
-                       R[idx, , drop = FALSE], 
-                       fi = fi[[1+x]][[1+y]],
-                       gamma = 5, n_iter = 5)
+      erer <- colMeans(Rxy) %*% t(colMeans(Rxy))
+      err <- var(Rxy) - erer
+      
+      fi_mat <- array((1-fixy)^2, dim = dim(err))
+      diag(fi_mat) <- 1-fixy 
+      varz <- err / fi_mat - erer / (1-fixy)^2
+      
+      em <- descent_2d(varz, Rxy, fi = fixy,
+                       gamma = 5, n_iter = 50,
+                       true_Sigma = attr(R, "Sigma"),
+                       # true_Sigma = k2_solver(Rxy, fi[[1+x]][[1+y]]),
+                       type = "Newton-Raphson")
+      
+      if (ret_em) em_obj[[1+x]][[1+y]] <- em 
+      # browser()
+      # vis_descent_2d(em, 30:40)
       
       Sigma[[1+x]][[1+y]] <- tail(em$Sigma, n = 1L)[[1]]
       
@@ -74,10 +114,12 @@ expfam_2d_solver <- function(X, Y, R, fi, mc_samples) {
     }
   }
   
+  if (ret_em) return(em_obj)
   logreg_ATE(X_mc, Y_mc, Z_mc, weights, "expfam-2d")
 }
 
-backward_solver <- function(X, Y, R, fi, verbose = FALSE, ...) {
+backward_solver <- function(X, Y, R, fi, verbose = FALSE, 
+                            direct = FALSE, ...) {
   
   k <- ncol(R)
   enc_mat <- t(replicate(nrow(R), 2^(seq_len(k) - 1L)))
@@ -167,6 +209,25 @@ backward_solver <- function(X, Y, R, fi, verbose = FALSE, ...) {
     for (y in c(T, F)) {
       pz_inf <- pz_inf + pxy[[x + 1]][[y + 1]] * pz[[x + 1]][[y + 1]]
     }
+  }
+  
+  if (direct) {
+    
+    py_x1z <- pz[[x1+1]][[y1+1]] * pxy[[x1+1]][[y1+1]] / (
+      pz[[x1+1]][[y1+1]] * pxy[[x1+1]][[y1+1]] + pz[[x1+1]][[y0+1]] * pxy[[x1+1]][[y0+1]]
+    )
+    
+    py_x0z <- pz[[x0+1]][[y1+1]] * pxy[[x0+1]][[y1+1]] / (
+      pz[[x0+1]][[y1+1]] * pxy[[x0+1]][[y1+1]] + pz[[x0+1]][[y0+1]] * pxy[[x0+1]][[y0+1]]
+    )
+    
+    py_x1z[is.nan(py_x1z)] <- 0
+    py_x0z[is.nan(py_x0z)] <- 0
+    ate <- sum((py_x1z - py_x0z) * pz_inf)
+    
+    return(
+      list(pz = pz_inf, ATE = ate, solver = "backward-direct")
+    )
   }
   
   dlt_x0x1 <- rep(0, 2^k)

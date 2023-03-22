@@ -1,11 +1,14 @@
 
 synth_data_mid <- function(n = 10^4, k = 5, seed = 22, 
                            fi = list(list(0.3, 0.3), list(0.3, 0.3)),
-                           class = c("latent_u", "expfam-1d", "expfam-2d")) {
+                           class = c("latent_u", "expfam-1d", "expfam-2d",
+                                     "expfam-2d*")) {
   
   
-  class <- match.arg(class, c("latent_u", "expfam-1d", "expfam-2d"))
-  assertthat::assert_that(class %in% c("latent_u", "expfam-1d", "expfam-2d"),
+  class <- match.arg(class, c("latent_u", "expfam-1d", "expfam-2d", 
+                              "expfam-2d*"))
+  assertthat::assert_that(class %in% c("latent_u", "expfam-1d", "expfam-2d", 
+                                       "expfam-2d*"),
                           msg = "Unknown model class specified.")
   
   set.seed(seed)
@@ -13,7 +16,8 @@ synth_data_mid <- function(n = 10^4, k = 5, seed = 22,
   Z <- switch(class,
      latent_u = z_latent_u(k, n, seed),
      `expfam-1d` = z_1d(k, n, seed),
-     `expfam-2d` = z_2d(k, n, seed)
+     `expfam-2d` = z_2d(k, n, seed),
+     `expfam-2d*` = z_2d(k, n, seed, Sigma_adv = TRUE)
   )
   
   lam <- -rep(2/3, k) # comorbidities make obesity less likely!
@@ -43,6 +47,9 @@ synth_data_mid <- function(n = 10^4, k = 5, seed = 22,
       }
     }
   }
+  
+  attr(R, "lambda") <- lam
+  attr(R, "mu") <- mu
   
   enc_mat <- t(replicate(nrow(Z), 2^(seq_len(k) - 1L)))
   pz <- tabulate(rowSums(Z * enc_mat) + 1, nbins = 2^k)
