@@ -187,3 +187,23 @@ NumericMatrix cpp_hessian_2d(NumericVector pz, IntegerVector idx, int p) {
   
   return hess;
 }
+
+// [[Rcpp::export]]
+NumericMatrix cpp_mu(NumericVector pz, int p) {
+  
+  NumericMatrix mu(p, p);
+  
+  for (int i = 0; i < p; ++i) {
+
+    for (int j = 0; j < p; ++j) {
+      
+      for (int dim = 0; dim < pz.length(); ++dim) {
+        
+        // std::cout<<(1<<i & dim) * ((1<<j & dim) > 0) * pz(dim)<<std::endl;
+        mu(i, j) += ((1<<i & dim) > 0) * ((1<<j & dim) > 0) * pz(dim);
+      }
+    }
+  }
+  
+  return mu;
+}

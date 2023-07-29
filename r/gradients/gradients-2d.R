@@ -161,11 +161,14 @@ descent_2d <- function(Sigma0, r, fi, gamma = 1, n_iter = 50, true_Sigma = NULL,
   
   type <- match.arg(type, c("vanishing", "normalized", "backtracking", 
                             "RMSprop", "Rprop", "Newton-Raphson"))
-  Sigma_dist <- loglc <- cor <- alpha <- gsc <- rep(0, n_iter)
+  Sigma_dist <- loglc <- cor <- rep(0, n_iter)
+  alpha <- gsc <- lam <- mu <- rep(0, n_iter)
   Sigma <- grads <- list()
   Sigma[[1]] <- Sigma0
   t_init <- 1
   beta <- 3 / 4
+  k <- ncol(Sigma0)
+  hess_sing <- FALSE
   
   loglc[1] <- likelihood_2d(Sigma[[1]], r, fi)
   if (!is.null(true_Sigma)) Sigma_dist[1] <- sum((Sigma[[1]] - true_Sigma)^2)
@@ -191,7 +194,7 @@ descent_2d <- function(Sigma0, r, fi, gamma = 1, n_iter = 50, true_Sigma = NULL,
       
       gamma_i <- gamma / (vec_norm(curr_grad) * (1 + i))
     } else if (type == "backtracking") {
-      # cat("Backtracking in iteration", i, "\n")
+     
       tuned <- FALSE
       
       Sigma_cand <- Sigma[[i-1]] + gamma_i * curr_grad
@@ -250,10 +253,12 @@ descent_2d <- function(Sigma0, r, fi, gamma = 1, n_iter = 50, true_Sigma = NULL,
           gamma_i <- gamma_i * 1 / 2
           Sigma_cand <- Sigma[[i-1]] + gamma_i * curr_grad
           Delta <- likelihood_2d(Sigma_cand, r, fi) - loglc[i - 1]
+          if (!is.numeric(Delta)) browser()
         }
       }
     } else if (type == "Newton-Raphson") {
       
+      # browser()
       Sigma_comp <- Sigma[[i-1]][!upper.tri(Sigma[[i-1]])]
       pz <- cpp_scaling_2d(Sigma[[i-1]])
       # compute the Hessian matrix
@@ -267,19 +272,22 @@ descent_2d <- function(Sigma0, r, fi, gamma = 1, n_iter = 50, true_Sigma = NULL,
       
       if (inherits(update, "error")) {
         
-        cat("Hessian singular, moving to simple gradients\n")
+        if (!hess_sing) {
+          cat("Hessian singular, moving to simple gradients\n")
+          hess_sing <- TRUE
+        } else cat(".")
         Sigma_cand <- Sigma[[i-1]] + gamma_i * curr_grad
         Delta <- likelihood_2d(Sigma_cand, r, fi) - loglc[i - 1]
         
-        if (Delta < 0) {
+        if (Delta < 0 | is.nan(Delta)) {
           
           gamma_i <- gamma / 2
-          while (Delta < 0) {
+          while (Delta < 0 | is.nan(Delta)) {
             
             gamma_i <- gamma_i * 1 / 2
             Sigma_cand <- Sigma[[i-1]] + gamma_i * curr_grad
             Delta <- likelihood_2d(Sigma_cand, r, fi) - loglc[i - 1]
-            
+            if (!is.numeric(Delta)) browser()
             if (gamma_i < 10^(-16)) {
               
               cat("No update in direction of gradient\n")
@@ -291,33 +299,24 @@ descent_2d <- function(Sigma0, r, fi, gamma = 1, n_iter = 50, true_Sigma = NULL,
         Sigma[[i]] <- Sigma_cand
       } else {
         
-        # cat(cor(update, curr_grad[!upper.tri(curr_grad)]), "\n")
-        
-        Sigma_pf <- function(Sigma_comp, update) {
+        hess_sing <- FALSE
+        if (!is.null(true_Sigma)) {
           
-          Sigma_comp <- Sigma_comp + update
-          
-          Sigma_pf <- Sigma[[i-1]]
-          Sigma_pf[, ] <- 0
-          Sigma_pf[!upper.tri(Sigma_pf)] <- Sigma_comp
-          
-          Sigma_pf <- (Sigma_pf + t(Sigma_pf))
-          diag(Sigma_pf) <- diag(Sigma_pf) / 2
-          
-          Sigma_pf
+          evals <- eigen(Hess, only.values = TRUE)$values
+          lam[i] <- min(evals)
+          mu[i] <- max(evals)
         }
         
         halving <- 1
-        Delta <- likelihood_2d(Sigma_pf(Sigma_comp, update), r, fi) - loglc[i - 1]
-        while (Delta < 0) {
-          # browser()
+        Delta <- likelihood_2d(Sigma_pf(Sigma_comp, update, k), r, fi) - 
+                 loglc[i - 1]
+        while (Delta < 0 | is.nan(Delta)) {
+
           halving <- halving * 2
-          Delta <- likelihood_2d(Sigma_pf(Sigma_comp, update/halving), r, fi) - 
-            loglc[i - 1]
+          Delta <- likelihood_2d(Sigma_pf(Sigma_comp, update/halving, k), r, fi) - 
+                   loglc[i - 1]
         }
-        Sigma[[i]] <- Sigma_pf(Sigma_comp, update/halving)
-        # cat("Halving =", halving, "\n")
-        # cat(i)
+        Sigma[[i]] <- Sigma_pf(Sigma_comp, update/halving, k)
       }
     }
     
@@ -340,11 +339,11 @@ descent_2d <- function(Sigma0, r, fi, gamma = 1, n_iter = 50, true_Sigma = NULL,
     
     if (!is.null(true_Sigma)) Sigma_dist[i] <- sum((Sigma[[i]] - true_Sigma)^2)
     
-    if (verbose) cat("Log(L_c) =", loglc[i], "\n")
+    if (i %% 10 == 0) {
+      cat("\nLog(L_c) =", loglc[i], "at iter", i, "\n")
+    }
     
-    cat(log(Delta, 10), "\n")
-    # if (Delta < eps) break
-    if (log(Delta, 10) < -15) break
+    if (log(Delta, 10) < -10) break
   }
   
   if (!is.null(true_Sigma)) {
@@ -360,7 +359,7 @@ descent_2d <- function(Sigma0, r, fi, gamma = 1, n_iter = 50, true_Sigma = NULL,
   list(Sigma = Sigma[seq_len(i)], Sigma_dist = Sigma_dist[seq_len(i)], 
        loglc = loglc[seq_len(i)], loglc_true = loglc_true, 
        cor = cor[seq_len(i)], alpha = alpha[seq_len(i)],
-       gsc = gsc[seq_len(i)],
+       gsc = gsc[seq_len(i)], lam = lam[seq_len(i)], mu = mu[seq_len(i)],
        mome_llc = mome_llc)
 }
 
@@ -436,4 +435,17 @@ nabq_gamma <- function(Sigma_s, Sigma_c, fi) {
   }
   
   Sigma_norm(grad_diff) / Sigma_norm(Sigma_s - Sigma_c)
+}
+
+vis_conv_radius <- function(object) {
+
+  dat <- data.table(gam = object$gsc[-1], 
+                    # mu = object$mu[-1], 
+                    lam = object$lam[-1], 
+                    iter = seq_along(object$gsc)[-1])
+  dat <- melt(dat, id.vars = "iter")
+  
+  ggplot(dat, aes(x = iter, y = value, color = variable)) +
+    geom_point() + geom_line() + theme_bw() +
+    theme(legend.position = "bottom")
 }

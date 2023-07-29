@@ -1,8 +1,15 @@
 
 #' * 2d exponential family generators *
-gen_Sigma <- function(k, adv = FALSE) {
+gen_Sigma <- function(k, adv = FALSE, real = TRUE) {
   
-  Sigma <- array(runif(k^2, -1, 1), dim = c(k, k))
+  if (real) {
+  
+    Sigma <- array(runif(k^2, 0, 0.5), dim = c(k, k))
+    diag(Sigma) <- runif(k, -1, 0)
+  } else {
+    
+    Sigma <- array(runif(k^2, -1, 1), dim = c(k, k))
+  }
   
   Sigma[upper.tri(Sigma)] <- 0
   

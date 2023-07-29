@@ -1,7 +1,7 @@
 
 pkgs <- c("ricu", "readr", "ranger", "ggplot2", "icd", "plotly",
           "latex2exp", "stringr", "assertthat", "data.table", "scales",
-          "faircause", "Rcpp")
+          "faircause", "Rcpp", "parallel")
 
 Sys.setenv("RICU_CONFIG_PATH" = file.path(root, "config"))
 Sys.setenv("RICU_SRC_LOAD" = 
@@ -27,3 +27,4 @@ library(icd)
 library(scales)
 library(faircause)
 library(Rcpp)
+library(parallel)

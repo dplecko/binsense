@@ -22,7 +22,7 @@ synth_data_mid <- function(n = 10^4, k = 5, seed = 22,
   
   lam <- -rep(2/3, k) # comorbidities make obesity less likely!
   mu <- rep(2/3, k) # comorbidities make mortality more likely!
-  beta <- -0.05 # obesity protects!
+  beta <- -0.15 # obesity protects!
   
   X <- rbinom(n, 1, expit(Z %*% lam - sum(lam) / 2))
   

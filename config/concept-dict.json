@@ -286,7 +286,7 @@
       ]
     }
   },
-  "elix": {
+  "elix_old": {
     "description": "No. comorbidities",
     "category": "Misc.",
     "target": "id_tbl",
@@ -585,5 +585,81 @@
     "category": "outcome",
     "callback": "icd_merge_callback",
     "class": "rec_cncpt"
+  },
+  "elix": {
+    "target": "id_tbl",
+    "sources": {
+      "miiv": [
+        {
+          "ids": [9, 10],
+          "table": "diagnoses_icd",
+          "val_var": "icd_code",
+          "sub_var": "icd_version",
+          "callback": "miiv_elix_dir"
+        }
+      ]
+    }
+  },
+  "elix_all": {
+    "target": "id_tbl",
+    "sources": {
+      "miiv": [
+        {
+          "ids": [9, 10],
+          "table": "diagnoses_icd",
+          "val_var": "icd_code",
+          "sub_var": "icd_version",
+          "callback": "miiv_elix_wide"
+        }
+      ]
+    }
+  },
+  "elix_wide": {
+    "concepts": ["elix_all"],
+    "description": "BMI (binary)",
+    "callback": "wide_elix",
+    "class": "rec_cncpt",
+    "target": "id_tbl"
+  },
+  "charlson_all": {
+    "target": "id_tbl",
+    "sources": {
+      "miiv": [
+        {
+          "ids": [9, 10],
+          "table": "diagnoses_icd",
+          "val_var": "icd_code",
+          "sub_var": "icd_version",
+          "callback": "miiv_charlson_wide"
+        }
+      ]
+    }
+  },
+  "bmi_all": {
+    "concepts": ["bmi", "bmi_omr"],
+    "callback": "bmi_all_cb",
+    "class": "rec_cncpt",
+    "target": "id_tbl"
+  },
+  "bmi_omr": {
+    "target": "id_tbl",
+    "sources": {
+      "miiv": [
+        {
+          "ids": ["BMI (kg/m2)"],
+          "table": "omr",
+          "sub_var": "result_name",
+          "callback": "miiv_omr_bmi_cb"
+        }
+      ],
+      "anzics": [
+        {
+          "table": "main",
+          "val_var": "WEIGHT",
+          "class": "col_itm",
+          "callback": "anzics_omr_bmi_cb"
+        }
+      ]
+    }
   }
 }

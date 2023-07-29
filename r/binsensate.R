@@ -1,11 +1,13 @@
 
 binsensate <- function(X, Y, R, fi, 
                        solver = c("backward", "expfam-1d", "expfam-2d",
-                                  "expfam-1d-direct", "backward-direct"),
+                                  "expfam-1d-direct", "backward-direct",
+                                  "expfam-2d-mom", "expfam-2d-mom-grad"),
                        mc_samples = 10^4, ret_em = FALSE, ...) {
   
   solver <- match.arg(solver, c("backward", "expfam-1d", "expfam-2d", 
-                                "expfam-1d-direct", "backward-direct"))
+                                "expfam-1d-direct", "backward-direct",
+                                "expfam-2d-mom", "expfam-2d-mom-grad"))
   
   switch(
     solver,
@@ -13,7 +15,9 @@ binsensate <- function(X, Y, R, fi,
     `expfam-1d` = expfam_1d_solver(X, Y, R, fi, mc_samples),
     `expfam-2d` = expfam_2d_solver(X, Y, R, fi, mc_samples, ret_em = ret_em),
     `expfam-1d-direct` = expfam_1d_direct(X, Y, R, fi, mc_samples),
-    `backward-direct` = backward_solver(X, Y, R, fi, direct = TRUE, ...)
+    `backward-direct` = backward_solver(X, Y, R, fi, direct = TRUE, ...),
+    `expfam-2d-mom` = expfam_2d_mom(X, Y, R, fi, mc_samples),
+    `expfam-2d-mom-grad` = expfam_2d_mom_grad(X, Y, R, fi, mc_samples)
   )
 }
 
@@ -115,6 +119,151 @@ expfam_2d_solver <- function(X, Y, R, fi, mc_samples, ret_em = FALSE) {
   }
   
   if (ret_em) return(em_obj)
+  logreg_ATE(X_mc, Y_mc, Z_mc, weights, "expfam-2d")
+}
+
+expfam_2d_mom <- function(X, Y, R, fi, mc_samples, parallel = TRUE) {
+  
+  Sigma <- list(list(NULL, NULL), list(NULL, NULL))
+  Z_mc <- X_mc <- Y_mc <- weights <- NULL
+  k <- ncol(R)
+  
+  if (parallel) {
+    
+    mcs <- mclapply(
+      0:3,
+      function(case) {
+        x <- as.integer(case / 2)
+        y <- as.integer(case %% 2)
+        
+        idx <- X == x & Y == y
+        Rxy <- R[idx, , drop = FALSE]
+        fixy <- fi[[1+x]][[1+y]]
+        
+        fi_mat <- array((1-fixy)^2, dim = c(k, k))
+        diag(fi_mat) <- 1-fixy
+        
+        mu_hat <- t(Rxy) %*% Rxy / nrow(Rxy) / fi_mat
+        
+        if (max(mu_hat) > 1) {
+          
+          message("Data likely not generated from this \\phi value...\n")
+        }
+        
+        Sigma_zero <- array(0, dim = c(k, k))
+        Sigma[[1+x]][[1+y]] <- mom_gradient(Sigma_zero, mu_hat, -1, nrow(Rxy))
+        
+        list(
+          Z = z_2d(Sigma = Sigma[[1+x]][[1+y]],
+                   n_samp = mc_samples),
+          X = rep(x, mc_samples),
+          Y = rep(y, mc_samples),
+          weights = rep(sum(idx) / nrow(R), mc_samples)
+        )
+      }, mc.cores = 4
+    )
+
+    Z_mc <- do.call(rbind, lapply(mcs, `[[`, "Z"))
+    X_mc <- do.call(c, lapply(mcs, `[[`, "X"))
+    Y_mc <- do.call(c, lapply(mcs, `[[`, "Y"))
+    weights <- do.call(c, lapply(mcs, `[[`, "weights"))
+  } else {
+    
+    for (x in c(0, 1)) {
+
+      for (y in c(0, 1)) {
+
+        idx <- X == x & Y == y
+        Rxy <- R[idx, , drop = FALSE]
+        fixy <- fi[[1+x]][[1+y]]
+
+        fi_mat <- array((1-fixy)^2, dim = c(k, k))
+        diag(fi_mat) <- 1-fixy
+
+        mu_hat <- t(Rxy) %*% Rxy / nrow(Rxy) / fi_mat
+
+        if (max(mu_hat) > 1) {
+
+          message("Data likely not generated from this \\phi value...\n")
+        }
+
+        Sigma_zero <- array(0, dim = c(k, k))
+        Sigma[[1+x]][[1+y]] <- mom_gradient(Sigma_zero, mu_hat, -1, nrow(Rxy))
+
+        # get Monte Carlo samples of Z
+        Z_mc <- rbind(Z_mc, z_2d(Sigma = Sigma[[1+x]][[1+y]],
+                                 n_samp = mc_samples))
+        X_mc <- c(X_mc, rep(x, mc_samples))
+        Y_mc <- c(Y_mc, rep(y, mc_samples))
+        weights <- c(weights, rep(sum(idx) / nrow(R), mc_samples))
+      }
+    }
+  }
+
+  logreg_ATE(X_mc, Y_mc, Z_mc, weights, "expfam-2d")
+}
+
+expfam_2d_mom_grad <- function(X, Y, R, fi, mc_samples, parallel = TRUE) {
+  
+  Sigma <- list(list(NULL, NULL), list(NULL, NULL))
+  Z_mc <- X_mc <- Y_mc <- weights <- NULL
+  k <- ncol(R)
+  
+  if (parallel) {
+    
+    mcs <- mclapply(
+      0:3,
+      function(case) {
+        x <- as.integer(case / 2)
+        y <- as.integer(case %% 2)
+        
+        idx <- X == x & Y == y
+        Rxy <- R[idx, , drop = FALSE]
+        fixy <- fi[[1+x]][[1+y]]
+        
+        Sigma_zero <- array(0, dim = c(k, k))
+        Sigma_opt <- r_descent_2d(Sigma_zero, Rxy, fixy, multistep = TRUE)
+        Sigma_opt <- tail(Sigma_opt, n = 1L)[[1]]
+        Sigma[[1+x]][[1+y]] <- Sigma_opt
+        
+        list(
+          Z = z_2d(Sigma = Sigma[[1+x]][[1+y]],
+                   n_samp = mc_samples),
+          X = rep(x, mc_samples),
+          Y = rep(y, mc_samples),
+          weights = rep(sum(idx) / nrow(R), mc_samples)
+        )
+      }, mc.cores = 4
+    )
+    Z_mc <- do.call(rbind, lapply(mcs, `[[`, "Z"))
+    X_mc <- do.call(c, lapply(mcs, `[[`, "X"))
+    Y_mc <- do.call(c, lapply(mcs, `[[`, "Y"))
+    weights <- do.call(c, lapply(mcs, `[[`, "weights"))
+  } else {
+    
+    for (x in c(0, 1)) {
+      
+      for (y in c(0, 1)) {
+        
+        idx <- X == x & Y == y
+        Rxy <- R[idx, , drop = FALSE]
+        fixy <- fi[[1+x]][[1+y]]
+        
+        Sigma_zero <- array(0, dim = c(k, k))
+        Sigma_opt <- r_descent_2d(Sigma_zero, Rxy, fixy, multistep = TRUE)
+        Sigma_opt <- tail(Sigma_opt, n = 1L)[[1]]
+        Sigma[[1+x]][[1+y]] <- Sigma_opt
+        
+        # get Monte Carlo samples of Z
+        Z_mc <- rbind(Z_mc, z_2d(Sigma = Sigma[[1+x]][[1+y]],
+                                 n_samp = mc_samples))
+        X_mc <- c(X_mc, rep(x, mc_samples))
+        Y_mc <- c(Y_mc, rep(y, mc_samples))
+        weights <- c(weights, rep(sum(idx) / nrow(R), mc_samples))
+      }
+    }
+  }
+  
   logreg_ATE(X_mc, Y_mc, Z_mc, weights, "expfam-2d")
 }
 
