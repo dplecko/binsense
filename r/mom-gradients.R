@@ -1,6 +1,7 @@
 #' * Newton-Raphson with Armijo-Goldstein *
 
-r_descent_2d <- function(Sigma, r, fi, n_iter = 100, multistep = FALSE) {
+r_descent_2d <- function(Sigma, r, fi, n_iter = 100, multistep = FALSE,
+                         verbose = FALSE) {
   
   Sigma_t <- list()
   Sigma_t[[1]] <- Sigma
@@ -30,7 +31,8 @@ r_descent_2d <- function(Sigma, r, fi, n_iter = 100, multistep = FALSE) {
     
     if (inherits(update, "error")) {
       
-      update <- curr_grad
+      update <- curr_grad[idx]
+      cat("Hessian Singular\n")
     }
     
     curr_obj <- likelihood_2d_fi0(Sigma_t[[i-1]], r, fi) 
@@ -42,6 +44,7 @@ r_descent_2d <- function(Sigma, r, fi, n_iter = 100, multistep = FALSE) {
     
     # if improvement < 0, need to halve until better
     arm_cnt <- 0
+    if (is.na(improve)) browser()
     while (improve < 0) {
       
       arm_cnt <- arm_cnt + 1
@@ -49,7 +52,8 @@ r_descent_2d <- function(Sigma, r, fi, n_iter = 100, multistep = FALSE) {
       Sigma_cand <- Sigma_pf(Sigma_t[[i-1]][idx], as.vector(alpha * update), k)
       new_obj <- likelihood_2d_fi0(Sigma_cand, r, fi)
       improve <- new_obj - curr_obj
-      cat(arm_cnt, "\n")
+      if (verbose) cat(arm_cnt, "\n")
+      if (is.na(improve)) browser()
     }
     
     #' * further improvement could be to make halving / doubling multi-step *
@@ -100,8 +104,11 @@ r_descent_2d <- function(Sigma, r, fi, n_iter = 100, multistep = FALSE) {
     }
     
     new_obj <- likelihood_2d_fi0(Sigma_cand, r, fi)
-    cat("Likelihood at iteration", i, "=", new_obj, 
-        "\n")
+    if (verbose) {
+      
+      cat("Likelihood at iteration", i, "=", new_obj, 
+          "\n")
+    }
     improve <- new_obj - curr_obj
     Sigma_t[[i]] <- Sigma_cand
     if (improve < 0) browser()

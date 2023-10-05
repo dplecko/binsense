@@ -441,8 +441,17 @@ icd9_callback <- function(x, group_var, val_var, ...) {
   x2[, version := 10]
   icd <- rbind(x1, x2)
   save(icd, file = file.path(root, "data", "icd.rda"))
-  browser()
-  res
+  # browser()
+  icd
+}
+
+copd_callback <- function(icd_code, ...) {
+  
+  res <- rbind(
+    icd_code[icd_version == 9][grep("^49[0-6]", icd_code)],
+    icd_code[icd_version == 10][grep("J449", icd_code)]
+  )
+  res[, icd_code := 1]
 }
 
 icd_merge_callback <- function(icd9, icd10, ...) {

@@ -534,6 +534,35 @@
       ]
     }
   },
+  "copd": {
+    "description": "Smoking (ICD-9/ICD-10)",
+    "category": "Misc.",
+    "target": "id_tbl",
+    "sources": {
+      "mimic_demo": [
+        {
+          "table": "diagnoses_icd",
+          "class": "col_itm",
+          "callback": "SMK_callback"
+        }
+      ],
+      "mimic": [
+        {
+          "table": "diagnoses_icd",
+          "class": "col_itm",
+          "callback": "SMK_callback"
+        }
+      ],
+      "miiv": [
+        {
+          "table": "diagnoses_icd",
+          "class": "col_itm",
+          "callback": "copd_callback",
+          "group_var": "icd_version"
+        }
+      ]
+    }
+  },
   "icd9": {
     "description": "ICD-9 codes",
     "category": "Misc.",

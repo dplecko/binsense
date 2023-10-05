@@ -2,7 +2,11 @@
 synth_data_mid <- function(n = 10^4, k = 5, seed = 22, 
                            fi = list(list(0.3, 0.3), list(0.3, 0.3)),
                            class = c("latent_u", "expfam-1d", "expfam-2d",
-                                     "expfam-2d*")) {
+                                     "expfam-2d*"),
+                           Sigma = NULL,
+                           lam = NULL, mu = NULL, 
+                           icept_x = NULL, icept_y = NULL,
+                           beta = NULL) {
   
   
   class <- match.arg(class, c("latent_u", "expfam-1d", "expfam-2d", 
@@ -16,21 +20,36 @@ synth_data_mid <- function(n = 10^4, k = 5, seed = 22,
   Z <- switch(class,
      latent_u = z_latent_u(k, n, seed),
      `expfam-1d` = z_1d(k, n, seed),
-     `expfam-2d` = z_2d(k, n, seed),
-     `expfam-2d*` = z_2d(k, n, seed, Sigma_adv = TRUE)
+     `expfam-2d` = z_2d(k, n, seed, Sigma),
+     `expfam-2d*` = z_2d(k, n, seed, Sigma, Sigma_adv = TRUE)
   )
   
-  lam <- -rep(2/3, k) # comorbidities make obesity less likely!
-  mu <- rep(2/3, k) # comorbidities make mortality more likely!
-  beta <- -0.15 # obesity protects!
-  
-  X <- rbinom(n, 1, expit(Z %*% lam - sum(lam) / 2))
+  use_icept <- TRUE # whether to use a specified intercept
+  if (is.null(beta) | is.null(lam) | is.null(mu)) {
+    
+    lam <- -rep(2/3, k) # comorbidities make obesity less likely!
+    mu <- rep(2/3, k) # comorbidities make mortality more likely!
+    beta <- -0.15 # obesity protects!
+    use_icept <- FALSE
+  }
   
   u <- runif(n)
-  Y <- as.integer(u < expit(Z %*% mu + X * beta - sum(mu) / 2))
   
-  Y0 <- u < expit(Z %*% mu + 0 * beta - sum(mu) / 2)
-  Y1 <- u < expit(Z %*% mu + 1 * beta - sum(mu) / 2)
+  if (use_icept) {
+    
+    X <- rbinom(n, 1, expit(Z %*% lam + icept_x))
+    Y <- as.integer(u < expit(Z %*% mu + X * beta + icept_y))
+    Y0 <- u < expit(Z %*% mu + 0 * beta + icept_y)
+    Y1 <- u < expit(Z %*% mu + 1 * beta + icept_y)
+  } else {
+    
+    X <- rbinom(n, 1, expit(Z %*% lam - sum(lam) / 2))
+    
+    Y <- as.integer(u < expit(Z %*% mu + X * beta - sum(mu) / 2))
+    Y0 <- u < expit(Z %*% mu + 0 * beta - sum(mu) / 2)
+    Y1 <- u < expit(Z %*% mu + 1 * beta - sum(mu) / 2)
+  }
+  
   ate <- mean(Y1) - mean(Y0)
   
   R <- Z
@@ -76,24 +95,22 @@ real_data <- function(src = c("miiv", "mimic_demo")) {
   
   src <- match.arg(src, c("miiv", "mimic_demo"))
   
-  ind <- load_concepts(c("bmi", "death"), src)
-  ind[, c(index_var(ind)) := NULL]
-  ind <- ind[!is.na(bmi)]
+  # compare new and old Elixhauser scores
+  data <- load_concepts(c("death", "bmi_all", "elix_wide", "age"), src, 
+                        id_type = "patient")
+  data <- replace_na(data, val = FALSE, vars = "death")
+  data[, c(index_var(data)) := NULL]
+  data[, Obesity := NULL]
+  data <- data[complete.cases(data)]
   
-  dat <- merge(ind, get_icd(index = "charlson"), all.x = TRUE)
-  dat[is.na(death), death := FALSE]
-  dat[, bmi_bin := bmi > 25]
+  cmb_sel <- c("CHF", "Arrhythmia", "PVD", "Paralysis", "NeuroOther", "Pulmonary", 
+               "Liver", "Lymphoma", "Mets", "Coagulopathy", "FluidsLytes")
   
-  for (col in setdiff(names(dat), "death")) {
-    dat[is.na(get(col)), c(col) := FALSE]
-  }
+  R <- as.matrix(data[, cmb_sel, with=FALSE])
+  X <- as.integer(data$bmi_all > 25)
+  Y <- as.integer(data$death)
   
-  keep_vars <- c("stay_id", "bmi_bin", "death")
-  cmb <- c("CHF", "Pulmonary", "LiverSevere", "Renal", "Stroke", "MI")
-  
-  dat <- dat[, c(keep_vars, cmb), with=FALSE]
-  dat <- setnames(dat, cmb, paste("cmb", seq_along(cmb), sep = "_"))
-  dat
+  list(R = R, X = X, Y = Y)
 }
 
 

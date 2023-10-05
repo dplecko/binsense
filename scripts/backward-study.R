@@ -6,10 +6,10 @@ invisible(lapply(list.files(r_dir, full.names = TRUE, recursive = TRUE),
 cpp_dir <- file.path(root, "cpp")
 invisible(lapply(list.files(cpp_dir, full.names = TRUE), sourceCpp))
 
-kseq <- seq.int(10L, 12L, 1L)
+kseq <- seq.int(5L, 8L, 1L)
 famseq <- c("expfam-2d")
 seedseq <- seq.int(35L, 39L)
-solver <- c("backward-direct", "expfam-2d-mom-grad")
+solver <- c("backward-direct", "expfam-2d-mom-grad", "two-stage-em")
 
 df <- expand.grid(kseq, famseq, seedseq, solver, stringsAsFactors = FALSE)
 names(df) <- c("dimension", "family", "seed", "solver")
@@ -21,11 +21,13 @@ for (i in i_range) {
   fixy <- list(list(0, 0), list(0, 0))
   fixy[[1]][[1]] <- fixy[[1]][[2]] <- fixy[[2]][[1]] <- fixy[[2]][[2]] <- 0.1
   
-  aux <- synth_data_mid(n = 100000, k = df$dimension[i], class = df$family[i],
+  aux <- synth_data_mid(n = 10000, k = df$dimension[i], class = df$family[i],
                         fi = fixy, seed = df$seed[i])
   
+  if (df$solver[i] == "two-stage-em") mc_samp <- 10 else mc_samp <- 10^4
   mcb <- microbenchmark::microbenchmark(
-    sns <- binsensate(aux$X, aux$Y, aux$R, fixy, solver = df$solver[i]), 
+    sns <- binsensate(aux$X, aux$Y, aux$R, fixy, solver = df$solver[i],
+                      mc_samples = mc_samp), 
     times = 1L
   )
   sns$runtime <- mcb$time

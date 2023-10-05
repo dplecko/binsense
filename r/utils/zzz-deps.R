@@ -1,7 +1,7 @@
 
 pkgs <- c("ricu", "readr", "ranger", "ggplot2", "icd", "plotly",
           "latex2exp", "stringr", "assertthat", "data.table", "scales",
-          "faircause", "Rcpp", "parallel")
+          "faircause", "Rcpp", "parallel", "foreach", "doParallel")
 
 Sys.setenv("RICU_CONFIG_PATH" = file.path(root, "config"))
 Sys.setenv("RICU_SRC_LOAD" = 
@@ -28,3 +28,9 @@ library(scales)
 library(faircause)
 library(Rcpp)
 library(parallel)
+
+library(foreach)
+library(doParallel)
+
+ncpus <- detectCores()
+registerDoParallel(cores = ncpus)

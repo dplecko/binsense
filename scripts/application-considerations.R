@@ -60,10 +60,31 @@ ggplot(
 freq[order(freq$cnt, decreasing = TRUE), ]
 freq[order(freq$coef, decreasing = TRUE), ]
 
+
+# make a list of 5-10 features
+# criterion: all with coef > 0.2, all with prevalence > 0.1 and coef > 0.05
+cmb_sel <- freq[freq$coef > 0.2 | (freq$cnt > 0.1 & freq$coef > 0.1), ]$condition
+# how many features is this?
+
+# compute fi_crit
+fi_crit <- function(r) {
+  
+  cor_mat <- t(r) %*% r / nrow(r)
+  fi_crit <- min(
+    min(1 - diag(cor_mat)),
+    min(1 - sqrt(cor_mat[upper.tri(cor_mat)]))
+  )
+  
+  fi_crit
+}
+
+fi_crit(as.matrix(data[, cmb_sel, with=FALSE]))
+
+
 # check the coefficients / prevalence on ANZICS
-anz_cmbs <- c("chr_resp", "chr_cvs", "chr_liv", "chr_ren", "chr_imun", "chr_imunrx", 
-              "aids", "hep_fail", "lymphoma", "met_canc", "leukaemia", "chr_imunsup", 
-              "cirrhosis")
+anz_cmbs <- c("chr_resp", "chr_cvs", "chr_liv", "chr_ren", "chr_imun", 
+              "chr_imunrx", "aids", "hep_fail", "lymphoma", "met_canc", 
+              "leukaemia", "chr_imunsup", "cirrhosis")
 
 anz_dat <- load_concepts(c(anz_cmbs, "site", "bmi", "age"), "anzics")
 anz_dat <- replace_na(anz_dat, 65, vars = "age")
