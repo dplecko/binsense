@@ -34,3 +34,36 @@ NumericVector cpp_idx_to_bit(IntegerVector idx, int dim) {
   
   return r_bit;
 }
+
+// [[Rcpp::export]]
+NumericVector cpp_bit_fi_hash(IntegerVector x, double fi) {
+  
+  int dim = x.length();
+  NumericVector res(1<<dim);
+  bool skip;
+  
+  for (int i = 0; i < 1<<dim; ++i) {
+    
+    skip = false;
+    for(int j = 0; j < dim; ++j) {
+      
+      if ( !(i & (1<<j)) && x(j) ) {
+        res(i) = 0;
+        skip = true;
+        break;
+      }
+    }
+    
+    // Rcout<< skip<<std::endl;
+    if (!skip) {
+      res(i) = 1;
+      for(int j = 0; j < dim; ++j) {
+        if ( i & (1<<j) && !x(j) ) res(i) *= fi;
+        if ( x(j) ) res(i) *= 1-fi;
+      }
+    }
+    
+  }
+  
+  return res;
+}

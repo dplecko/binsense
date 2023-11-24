@@ -96,8 +96,18 @@ real_data <- function(src = c("miiv", "mimic_demo")) {
   src <- match.arg(src, c("miiv", "mimic_demo"))
   
   # compare new and old Elixhauser scores
-  data <- load_concepts(c("death", "bmi_all", "elix_wide", "age"), src, 
-                        id_type = "patient")
+  fl_pth <- file.path(root, "data", paste0(src, "_real_data.rda"))
+  
+  if (!file.exists(fl_pth)) {
+    
+    data <- load_concepts(c("death", "bmi_all", "elix_wide", "age"), src, 
+                          id_type = "patient")
+    save(data, file = fl_pth)
+  } else {
+    
+    load(fl_pth)
+  }
+  
   data <- replace_na(data, val = FALSE, vars = "death")
   data[, c(index_var(data)) := NULL]
   data[, Obesity := NULL]

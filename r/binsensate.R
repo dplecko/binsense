@@ -18,10 +18,9 @@ binsensate <- function(X, Y, R, fi,
     `expfam-1d` = expfam_1d_solver(X, Y, R, fi, mc_samples),
     `expfam-2d` = expfam_2d_solver(X, Y, R, fi, mc_samples, ret_em = ret_em),
     `expfam-1d-direct` = expfam_1d_direct(X, Y, R, fi, mc_samples),
-    `backward-direct` = backward_solver(X, Y, R, fi, direct = TRUE, ...),
     `expfam-2d-mom` = expfam_2d_mom(X, Y, R, fi, mc_samples),
     `expfam-2d-mom-grad` = expfam_2d_mom_grad(X, Y, R, fi, mc_samples),
-    `two-stage-em` = two_stage_em(X, Y, R, fi, mc_per_samp)
+    `two-stage-em` = two_stage_em(X, Y, R, fi, mc_per_samp, ...)
   )
 }
 
@@ -40,7 +39,7 @@ expfam_1d_solver <- function(X, Y, R, fi, mc_samples) {
                                      gamma = 10, n_iter = 10)
       
       lambda[[1+x]][[1+y]] <- tail(em[[1+x]][[1+y]]$lambda, n = 1L)[[1]] 
-                            # aux$lxy[[1+x]][[1+y]]
+                              # aux$lxy[[1+x]][[1+y]]
       
       # get Monte Carlo samples of Z
       Z_mc <- rbind(Z_mc, z_1d(lambda = lambda[[1+x]][[1+y]], 
@@ -291,15 +290,18 @@ ateor_Sigma_xy <- function(Sigma, pxy) {
       pz_xy[[1+x]][[1+y]] <- pz_xy[[1+x]][[1+y]] / sum(pz_xy[[1+x]][[1+y]])
       pz <- pz + pz_xy[[1+x]][[1+y]] * pxy[[1+x]][[1+y]]
       
-      py_x[[1+x]][[1+y]] <- pxy[[1+x]][[1+y]] / (pxy[[1+x]][[1]] + pxy[[1+x]][[2]])
+      py_x[[1+x]][[1+y]] <- pxy[[1+x]][[1+y]] / 
+        (pxy[[1+x]][[1]] + pxy[[1+x]][[2]])
     }
   }
   
   py1_x1z <- py_x[[2]][[2]] * pz_xy[[2]][[2]] / 
-    (py_x[[1+x1]][[1]] * pz_xy[[1+x1]][[1]] + py_x[[1+x1]][[2]] * pz_xy[[2]][[2]]) 
+    (py_x[[1+x1]][[1]] * pz_xy[[1+x1]][[1]] + 
+     py_x[[1+x1]][[2]] * pz_xy[[2]][[2]]) 
   
   py1_x0z <- py_x[[1]][[2]] * pz_xy[[1]][[2]] / 
-    (py_x[[1+x0]][[1]] * pz_xy[[1+x0]][[1]] + py_x[[1+x0]][[2]] * pz_xy[[1+x0]][[2]])
+    (py_x[[1+x0]][[1]] * pz_xy[[1+x0]][[1]] + 
+     py_x[[1+x0]][[2]] * pz_xy[[1+x0]][[2]])
   
   ods_x1 <- py1_x1z / (1 - py1_x1z)
   ods_x0 <- py1_x0z / (1 - py1_x0z)
@@ -311,27 +313,21 @@ ateor_Sigma_xy <- function(Sigma, pxy) {
   )
 }
 
-backward_solver <- function(X, Y, R, fi, verbose = FALSE, 
-                            direct = FALSE, ...) {
+backward_solver <- function(X, Y, R, fi, verbose = FALSE, ...) {
   
   k <- ncol(R)
   enc_mat <- t(replicate(nrow(R), 2^(seq_len(k) - 1L)))
   
-  # get P(y | r, x)
-  logreg <- glm(Y ~ ., data = data.frame(Y, X, R), family = "binomial")
-  pyrx0 <- pyrx1 <- rep(0, 2^k)
-  for (i in seq_len(2^k)) {
-    
-    i_bin <- as.integer(intToBits(i-1))[1:k]
-    pyrx0[i] <- expit(sum(logreg$coefficients * c(1, 0, i_bin)))
-    pyrx1[i] <- expit(sum(logreg$coefficients * c(1, 1, i_bin)))
-    
-  }
-  
-  pr <- pz <- pxy <- A <- A_inv <- B <- list(list(0, 0), list(0, 0))
+  pr <- pz <- pxy <- list(list(0, 0), list(0, 0))
   
   x0 <- y0 <- 0
   x1 <- y1 <- 1
+  
+  # expand fi if needed
+  for (x in c(T, F))
+    for (y in c(T, F))
+      if (length(fi[[x + 1]][[y + 1]]) == 1 & k > 1) 
+        fi[[x + 1]][[y + 1]] <- rep(fi[[x + 1]][[y + 1]], k)
   
   for (x in c(T, F)) {
     
@@ -348,14 +344,7 @@ backward_solver <- function(X, Y, R, fi, verbose = FALSE,
       cprxy <- cprxy / sum(cprxy)
       
       pxy[[x + 1]][[y + 1]] <- nrow(R[idx, , drop = FALSE]) / nrow(R)
-      
       pr[[x + 1]][[y + 1]] <- cprxy
-      
-      A[[x + 1]][[y + 1]] <- cpp_A_xy(fi_xy = fi[[x + 1]][[y + 1]], k = k)
-      
-      if (any(A[[x + 1]][[y + 1]] < 0) | any(A[[x + 1]][[y + 1]] < 0)) 
-        return(list(ATE = NA, cmb_diff = NA))
-      
       
       pz[[x + 1]][[y + 1]] <- 
         vapply(
@@ -364,37 +353,35 @@ backward_solver <- function(X, Y, R, fi, verbose = FALSE,
           numeric(1L)
         )
       
-      # assert_that(sum(abs(pz[[x + 1]][[y + 1]] - pz_cand)) < 10^(-10))
-      
-      A_inv[[x+1]][[y+1]] <- lapply(
-        seq_len(2^k),
-        function(z) infer_pz(z, pr[[x + 1]][[y + 1]], fi[[x + 1]][[y + 1]], k, T)
-      )
-      A_inv[[x+1]][[y+1]] <- do.call(rbind, A_inv[[x+1]][[y+1]])
-      
-      # B represents P(z | r, x, y)
-      B[[x + 1]][[y + 1]] <- cpp_invert_A_xy(A[[x + 1]][[y + 1]], 
-                                             pz[[x + 1]][[y + 1]], 
-                                             pr[[x + 1]][[y + 1]])
-      
-      
       if (check_simplex(pz[[x + 1]][[y + 1]])) {
+        
         initial <- pz[[x + 1]][[y + 1]]
-        pz[[x + 1]][[y + 1]] <- locate_simplex(pr[[x + 1]][[y + 1]], 
-                                               A_inv[[x + 1]][[y + 1]])
-        correction <- sum(abs(initial - pz[[x+1]][[y+1]]) * 100)
-        if (verbose) {
-          cat("Locate simplex correction ", round(correction, 2), "%\n", sep = "")
-        }
+        A_inv_xy <- lapply(
+          seq_len(2^k),
+          function(z) infer_pz(z, pr[[x + 1]][[y + 1]], fi[[x + 1]][[y + 1]], k, 
+                               TRUE)
+        )
+        A_inv_xy <- do.call(rbind, A_inv_xy)
+        
+        # trade for a well-posed inverse problem
+        fi_new <- trade_inv_prob(pz[[x + 1]][[y + 1]], pr[[x + 1]][[y + 1]], 
+                                 A_inv_xy, fi[[x + 1]][[y + 1]])
+        
+        # re-run with new fi
+        fi_new <- fi_trade(fi, fi_new, x, y)
+        return(
+          backward_solver(X, Y, R, fi_new, ...)
+        )
       }
       
-      if (min(pz[[x + 1]][[y + 1]]) < -(10)^(-10) | max(pz[[x + 1]][[y + 1]]) > 1) {
+      if (min(pz[[x + 1]][[y + 1]]) < -(10)^(-10) | 
+          max(pz[[x + 1]][[y + 1]]) > 1) {
+        
+        
         cat("Walking out of simplex for (x,y)", x, y, "and range", 
             range(pz[[x + 1]][[y + 1]]), "\n")
       }
-      
     }
-    
   }
   
   pz_inf <- rep(0, 2^k)
@@ -404,53 +391,22 @@ backward_solver <- function(X, Y, R, fi, verbose = FALSE,
     }
   }
   
-  if (direct) {
-    
-    py_x1z <- pz[[x1+1]][[y1+1]] * pxy[[x1+1]][[y1+1]] / (
-      pz[[x1+1]][[y1+1]] * pxy[[x1+1]][[y1+1]] + pz[[x1+1]][[y0+1]] * pxy[[x1+1]][[y0+1]]
-    )
-    
-    py_x0z <- pz[[x0+1]][[y1+1]] * pxy[[x0+1]][[y1+1]] / (
-      pz[[x0+1]][[y1+1]] * pxy[[x0+1]][[y1+1]] + pz[[x0+1]][[y0+1]] * pxy[[x0+1]][[y0+1]]
-    )
-    
-    py_x1z[is.nan(py_x1z)] <- 0
-    py_x0z[is.nan(py_x0z)] <- 0
-    ate <- sum((py_x1z - py_x0z) * pz_inf)
-    
-    return(
-      list(pz = pz_inf, ATE = ate, solver = "backward-direct")
-    )
-  }
+  py_x1z <- pz[[x1 + 1]][[y1 + 1]] * pxy[[x1 + 1]][[y1 + 1]] / (
+    pz[[x1 + 1]][[y1 + 1]] * pxy[[x1 + 1]][[y1 + 1]] + 
+      pz[[x1 + 1]][[y0 + 1]] * pxy[[x1 + 1]][[y0 + 1]]
+  )
   
-  dlt_x0x1 <- rep(0, 2^k)
-  for (i in seq_len(2^k)) {
-    
-    
-    ratio_x0 <- B[[x0 + 1]][[y1 + 1]][i, ] / 
-      (B[[x0 + 1]][[y1 + 1]][i, ] * pyrx0 + B[[x0+1]][[y0+1]][i, ] * (1-pyrx0))
-    ratio_x0[is.nan(ratio_x0)] <- 0
-    
-    ratio_x1 <- B[[x1+1]][[y1+1]][i, ] / 
-      (B[[x1+1]][[y1+1]][i, ] * pyrx1 + B[[x1+1]][[y0+1]][i, ] * (1-pyrx1))
-    ratio_x1[is.nan(ratio_x1)] <- 0
-    
-    # can the fi_xy case not be solved?! additional solving needed?
-    przx0 <- A[[x0 + 1]][[y1 + 1]][, i] 
-    przx1 <- A[[x1 + 1]][[y1 + 1]][, i]
-    
-    dlt_x0x1[i] <- sum(pyrx1 * ratio_x1 * przx1 - 
-                         pyrx0 * ratio_x0 * przx0) # \sum_r {...}
-  }
+  py_x0z <- pz[[x0 + 1]][[y1 + 1]] * pxy[[x0 + 1]][[y1 + 1]] / (
+    pz[[x0 + 1]][[y1 + 1]] * pxy[[x0 + 1]][[y1 + 1]] + 
+      pz[[x0 + 1]][[y0 + 1]] * pxy[[x0 + 1]][[y0 + 1]]
+  )
   
-  wgh_vec <- sapply(seq_along(pz_inf) - 1, 
-                    function(x) sum(as.integer(intToBits(x))))
+  py_x1z[is.nan(py_x1z)] <- 0
+  py_x0z[is.nan(py_x0z)] <- 0
+  ate <- sum((py_x1z - py_x0z) * pz_inf)
   
-  list(
-    pz = pz_inf,
-    ATE = sum(dlt_x0x1 * pz_inf),
-    solver = "backward",
-    delta = dlt_x0x1
+  return(
+    list(pz = pz_inf, ATE = ate, fi = fi, solver = "backward")
   )
 }
 
@@ -497,7 +453,6 @@ logreg_ATE <- function(X, Y, Z, weights, solver = "expfam-1d", Sigma) {
   )
 }
 
-
 logreg_ATE_flex <- function(X, Y, Z, weights, solver = "expfam-1d", Sigma) {
   
   mc_samp <- 10^4
@@ -522,32 +477,9 @@ logreg_ATE_flex <- function(X, Y, Z, weights, solver = "expfam-1d", Sigma) {
     dat <- data.frame(X = X_mc, Y = Y_mc, Z = Z_mc)
   }
   
-  # nsamp_seq <- c(5, 10, 25, 50, 100) * 1000
-  # df <- data.frame(nsamp = nsamp_seq)
-  # df$coef <- df$std <- 0
-  # for (i in seq_along(nsamp_seq)) {
-  #   
-  #   dat <- get_boot_samp(Sigma, wgh, nsamp_seq[i])
-  #   mod <- glm(
-  #     Y ~ ., data = dat, family = "binomial"
-  #   )
-  #   
-  #   df$coef[i] <- coef(mod)["X"]
-  #   df$std[i] <- summary(mod)$coefficients["X", "Std. Error"]
-  #   df$nsamp[i] <- nsamp_seq[i]
-  # }
-  # 
-  # browser()
-  # 
-  # ggplot(df, aes(x = log(nsamp), y = coef)) +
-  #   geom_point() + geom_line() +
-  #   geom_ribbon(aes(ymin = coef - 1.96 * std, ymax = coef + 1.96 * std),
-  #               alpha = 0.2, linewidth = 0) +
-  #   theme_minimal()
-  # browser()
-  
   # bootstrap the thingy
-  dat <- get_boot_samp(Sigma, wgh, 10^6) # dat[sample.int(nrow(dat), replace = TRUE, prob = weights), ]
+  dat <- get_boot_samp(Sigma, wgh, 10^6) 
+  # dat[sample.int(nrow(dat), replace = TRUE, prob = weights), ]
   tryCatch(
     mod <- glm(
       Y ~ ., data = dat, family = "binomial"
@@ -568,9 +500,9 @@ logreg_ATE_flex <- function(X, Y, Z, weights, solver = "expfam-1d", Sigma) {
        OR_upr = exp(OR_hat + 1.96 * OR_std))
 }
 
-two_stage_em <- function(X, Y, R, fi, mc_per_samp) {
+two_stage_em <- function(X, Y, R, fi, mc_per_samp = 10,  
+                         mc_twister = "R", n_epoch = 10) {
   
-  n_epoch <- 10
   # Step (0) - infer Sigma
   lmb <- list()
   
@@ -586,7 +518,8 @@ two_stage_em <- function(X, Y, R, fi, mc_per_samp) {
     lambda0 <- xfit$coefficients[-1]
     lambda_icept <- xfit$coefficients[1]
     
-    yfit <- glm(Y ~ ., data = data.frame(Y = Y, X = X, R = R), family = "binomial")
+    yfit <- glm(Y ~ ., data = data.frame(Y = Y, X = X, R = R), 
+                family = "binomial")
     r_coeff <- grepl("^R", names(yfit$coefficients))
     
     mu_icept <- yfit$coefficients[1]
@@ -608,36 +541,52 @@ two_stage_em <- function(X, Y, R, fi, mc_per_samp) {
     beta <- lmb[[i]]$beta
     
     # sample mc_samples for each actual sample
-    mc_twist <- lapply(
-      seq_len(nrow(R)),
-      function(k) {
-        
-        x <- X[k]
-        y <- Y[k]
-        r <- R[k, ]
-        
-        pr_zxy <- cpp_bit_fi_hash(r, fi[[1 + x]][[1 + y]])
-        
-        if (x == 1) px <- px_z else px <- 1 - px_z
-        
-        py_z <- expit(logity_z + beta * x)
-        if (y == 1) py <- py_z else py <- 1 - py_z
-        
-        probs <- pz * px * py * pr_zxy
-        probs <- probs / sum(probs)
-        
-        r_mc_idx <- sample(length(probs), size = mc_per_samp, prob = probs,
-                           replace = TRUE)
-        r_mc <- cpp_idx_to_bit(r_mc_idx - 1, length(r)) # returns a matrix
-        
-        cbind(X = x, Y = y, R = r_mc)
-      }
-    )
+    if (mc_twister == "R") {
+      
+      mc_twist <- lapply(
+        seq_len(nrow(R)),
+        function(j) {
+          
+          x <- X[j]
+          y <- Y[j]
+          r <- R[j, ]
+          
+          pr_zxy <- cpp_bit_fi_hash(r, fi[[1 + x]][[1 + y]])
+          
+          if (x == 1) px <- px_z else px <- 1 - px_z
+          
+          py_z <- expit(logity_z + beta * x)
+          if (y == 1) py <- py_z else py <- 1 - py_z
+          
+          probs <- pz * px * py * pr_zxy
+          probs <- probs / sum(probs)
+          
+          r_mc_idx <- sample(length(probs), size = mc_per_samp, prob = probs,
+                             replace = TRUE)
+          r_mc <- cpp_idx_to_bit(r_mc_idx - 1, length(r)) # returns a matrix
+          
+          cbind(X = x, Y = y, R = r_mc)
+        }
+      )
+    } else {
+      
+      mc_twist <- NULL
+    }
     
     mc_twist <- as.data.frame(do.call(rbind, mc_twist))
     
     # re-fit for lambda, mu, beta
     lmb[[i+1]] <- fit_lmb(mc_twist[, 1], mc_twist[, 2], mc_twist[, -c(1, 2)])
+    
+    # early stopping criterion
+    scale <- 1
+    if (
+      vec_norm(lmb[[i+1]]$lambda - lmb[[i]]$lambda)^2 < 
+      scale * ncol(R) / nrow(R) &
+      vec_norm(lmb[[i+1]]$mu - lmb[[i]]$mu)^2 < scale * ncol(R) / nrow(R) &
+      lmb[[i+1]]$beta - lmb[[i]]$beta < scale / nrow(R)
+    ) break
+    
     cat("\r", i)
   }
   

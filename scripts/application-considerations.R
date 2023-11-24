@@ -57,8 +57,8 @@ ggplot(
 # or association of HTN with obesity / fat mass / protective effect
 
 # final task: get a top list of features
-freq[order(freq$cnt, decreasing = TRUE), ]
-freq[order(freq$coef, decreasing = TRUE), ]
+freq <- freq[order(freq$cnt, decreasing = TRUE), ]
+freq <- freq[order(freq$coef, decreasing = TRUE), ]
 
 
 # make a list of 5-10 features

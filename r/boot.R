@@ -32,7 +32,6 @@ binsensate_boot <- function(
       `expfam-1d` = expfam_1d_solver(Xb, Yb, Rb, fi, mc_samples),
       `expfam-2d` = expfam_2d_solver(Xb, Yb, Rb, fi, mc_samples, ret_em = ret_em),
       `expfam-1d-direct` = expfam_1d_direct(Xb, Yb, Rb, fi, mc_samples),
-      `backward-direct` = backward_solver(Xb, Yb, Rb, fi, direct = TRUE, ...),
       `expfam-2d-mom` = expfam_2d_mom(Xb, Yb, Rb, fi, mc_samples),
       `expfam-2d-mom-grad` = expfam_2d_mom_grad(Xb, Yb, Rb, fi, mc_samples),
       `two-stage-em` = two_stage_em(Xb, Yb, Rb, fi, mc_per_samp)

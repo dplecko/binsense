@@ -63,12 +63,21 @@ infer_pz <- function(z, pr, phi, k, weights = FALSE) {
                              simplify = FALSE), 
                       recursive = FALSE)
   }
-  
-  
-  r_wgh <- unlist(
-    lapply(r_geq_z, function(r) (-1)^length(r) * phi^length(r) * 
-             (1-phi)^(-length(r) - sum(zbit > 0)))
-  )
+  # browser()
+  if (length(phi) == 1) {
+    
+    r_wgh <- unlist(
+      lapply(r_geq_z, function(r) (-1)^length(r) * phi^length(r) * 
+               (1-phi)^(-length(r) - sum(zbit > 0)))
+    )
+  } else if (length(phi) == k) {
+    
+    r_wgh <- unlist(
+      lapply(r_geq_z, function(r) (-1)^length(r) * 
+               prod(phi[r]) / 
+               prod(1 - phi[c(r, which(zbit > 0))]))
+    )
+  }
   
   r_idx <- unlist(lapply(r_geq_z, function(r) sum(2^((1:k) - 1)[r]) + z))
   

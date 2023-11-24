@@ -9,7 +9,7 @@ invisible(lapply(list.files(cpp_dir, full.names = TRUE), sourceCpp))
 kseq <- seq.int(5L, 8L, 1L)
 famseq <- c("expfam-2d")
 seedseq <- seq.int(35L, 39L)
-solver <- c("backward-direct", "expfam-2d-mom-grad", "two-stage-em")
+solver <- c("backward", "expfam-2d-mom-grad", "two-stage-em")
 
 df <- expand.grid(kseq, famseq, seedseq, solver, stringsAsFactors = FALSE)
 names(df) <- c("dimension", "family", "seed", "solver")
