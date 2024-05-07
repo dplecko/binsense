@@ -29,7 +29,7 @@ We first look at possible agnostic, $x$-specific, and $y$-specific $\phi$-values
 \end{align}
 based on the two stage EM approach.
 
-```{r main, fig.align='center', fig.width=12, fig.height=4, fig.cap="Estimation of ATE values based on the two-stage EM approach.", fig.width=18, fig.height=4}
+```{r fi-search, fig.align='center', fig.width=12, fig.height=4, fig.cap="Estimation of ATE values based on the two-stage EM approach.", fig.width=18, fig.height=4}
 fi_seq <- seq(0, 0.2, 0.05)
 fi_grid <- rbind(
   rng_to_df("agnostic", fi_seq),
