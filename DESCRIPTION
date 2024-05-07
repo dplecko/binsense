@@ -1,0 +1,22 @@
+Package: binsensate
+Title: Binary Sensitivity Analysis for Missing Data
+Version: 0.0.0.9000
+Authors@R: 
+    person("Anonymous", "Author", , "anonymous@anonymous.com", role = c("aut", "cre"))
+Description: Missing data is a common issue in many statistical applications, especially when the missingness pattern is informative. In this package, we deal with the setting of missing binary data and estimation of average treatment effects (ATE) under imperfectly observed confounding. In particular, we assume that binary confounders may be underreported, with the data containing a biased proxy of the true confounder values. In a sensitivity-type analysis we answer the question: which rate of (informative) missingness would be needed to change the sign of causal effect estimate? The interpretable sensitivity parameter is the data fidelity -- the probability that a confounder is recorded correctly.
+License: GPL-3
+Encoding: UTF-8
+VignetteBuilder: rmarkdown
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.1
+Depends: R (>= 3.5.0)
+Imports: 
+    Rcpp,
+    ggplot2
+Suggests:
+    latex2exp,
+    assertthat,
+    knitr,
+    rmarkdown
+LinkingTo: 
+    Rcpp

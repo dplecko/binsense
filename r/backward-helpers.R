@@ -1,11 +1,103 @@
 
+A_xy <- function(fi_xy, k, order = Inf) {
+  
+  Axy <- array(0, dim = c(2^k, 2^k))
+  
+  for (i in seq_len(2^k)) {
+    
+    for (j in seq_len(2^k)) {
+      
+      i_bin <- as.integer(intToBits(i-1))
+      j_bin <- as.integer(intToBits(j-1))
+      
+      if (any(i_bin > j_bin)) next
+      if (all(i_bin == j_bin)) next
+      if (sum(j_bin - i_bin) > order) next
+      Axy[i, j] <- fi_xy^sum(j_bin - i_bin) * (1 - fi_xy)^sum(i_bin)
+      
+    }
+  }
+  
+  Axy <- Axy + diag(1 - colSums(Axy))
+  
+  assertthat::assert_that(!is.element(0, eigen(Axy)$values),
+                          msg = "Singular transition matrix")
+  
+  Axy
+}
+
+invert_A_xy <- function(A, pz, pr) {
+  
+  B <- array(0, dim = dim(A))
+  k <- as.integer(log(nrow(B), 2))
+  
+  for (i in seq_len(2^k)) {
+    
+    for (j in seq_len(2^k)) {
+      
+      i_bin <- as.integer(intToBits(i-1))
+      j_bin <- as.integer(intToBits(j-1))
+      
+      B[i, j] <- A[j, i] * pz[i] / pr[j]
+      
+    }
+  }
+  
+  B
+}
+
+#' @importFrom utils combn
+infer_pz <- function(z, pr, phi, k, weights = FALSE) {
+  
+  zbit <- as.integer(intToBits(z-1)[seq.int(1, k, 1)])
+  idx <- which(zbit == 0)
+  
+  if (length(idx) == 0) {
+    r_geq_z <- list(integer(0L))
+  } else if (length(idx) == 1) {
+    r_geq_z <- list(integer(0L), idx)
+  } else {
+    
+    r_geq_z <- unlist(lapply(0:length(idx),
+                             combn, 
+                             x = idx,
+                             simplify = FALSE), 
+                      recursive = FALSE)
+  }
+  
+  if (length(phi) == 1) {
+    
+    r_wgh <- unlist(
+      lapply(r_geq_z, function(r) (-1)^length(r) * phi^length(r) * 
+               (1-phi)^(-length(r) - sum(zbit > 0)))
+    )
+  } else if (length(phi) == k) {
+    
+    r_wgh <- unlist(
+      lapply(r_geq_z, function(r) (-1)^length(r) * 
+               prod(phi[r]) / 
+               prod(1 - phi[c(r, which(zbit > 0))]))
+    )
+  }
+  
+  r_idx <- unlist(lapply(r_geq_z, function(r) sum(2^((1:k) - 1)[r]) + z))
+  
+  if (weights) {
+    wgh <- rep(0, 2^k)
+    wgh[r_idx] <- r_wgh
+    return(wgh)
+  }
+  
+  sum(r_wgh * pr[r_idx])
+}
+
 trade_inv_prob <- function(pz, pr, Ainv, fi) {
   
   k <- length(fi)
   while(TRUE) {
     
     neg_idx <- which(pz < 0)
-    if (length(neg_idx) == 0) browser() # return(fi)
+    if (length(neg_idx) == 0) break
     
     pz_neg_init <- pz[neg_idx]
     
@@ -24,7 +116,6 @@ trade_inv_prob <- function(pz, pr, Ainv, fi) {
     while( gain < c * alpha * sum(fi_grad^2) ) {
       
       alpha <- alpha / 2
-      #' re-compute pz -- * but only for a select few, speeds up! *
       fi_cand <- fi + alpha * fi_grad 
       pz_neg <- vapply(
         neg_idx,
@@ -34,10 +125,9 @@ trade_inv_prob <- function(pz, pr, Ainv, fi) {
       
       gain <- sum(pz_neg) - sum(pz_neg_init)
       
-      if (alpha < 10^(-10)) browser()
+      if (alpha < 10^(-10)) break
       
       if (gain > 0 & (gain < 1/5 * abs(sum(pz_neg_init)) | gain < 10^(-3))) break
-      cat("Armijo-Goldstein sets alpha to", alpha, "\n")
     }
     fi <- fi + alpha * fi_grad
     fi[fi < 0.001] <- 0
@@ -74,10 +164,10 @@ fi_trade <- function(fi, fi_new, x, y) {
     fi <- list(list(fi_new, fi_new), list(fi_new, fi_new))
   } else if (type == "x") {
     
-    fi[[1]][[y + 1]] <- fi[[2]][[y + 1]] <- fi_new
+    fi[[x + 1]][[1]] <- fi[[x + 1]][[2]] <- fi_new
   } else if (type == "y") {
     
-    fi[[x + 1]][[1]] <- fi[[x + 1]][[2]] <- fi_new
+    fi[[1]][[y + 1]] <- fi[[2]][[y + 1]] <- fi_new
   } else {
     
     fi[[x + 1]][[y + 1]] <- fi_new
@@ -86,6 +176,7 @@ fi_trade <- function(fi, fi_new, x, y) {
   fi
 }
 
+#' @importFrom ggplot2 ggplot geom_col theme_bw facet_grid ylab xlab aes
 fi_prof <- function(fi) {
   
   k <- length(fi[[1]][[1]])
@@ -105,3 +196,58 @@ fi_prof <- function(fi) {
     facet_grid(x ~ y) +
     ylab(latex2exp::TeX("$\\phi$ value")) + xlab("Feature Number")
 }
+
+check_simplex <- function(pzx) {
+  
+  if (min(pzx) < 0 || max(pzx) > 1) {
+    return(TRUE)
+  }
+  FALSE
+}
+
+#' @importFrom stats pbinom
+ill_pose_sig <- function(pz, pr, A_inv_xy, nsamp, sig_lvl = 0.01) {
+  
+  cmp_lub <- function(phat, n, alpha, lwr) {
+    
+    
+    tol <- 0.001
+    low <- 0
+    high <- 1
+    while (high - low > tol) {
+      mid <- (low + high) / 2
+      
+      if (pbinom(n * phat, size = n, prob = mid, lower.tail = !lwr) > alpha & !lwr) {
+        low <- mid
+      } else {
+        high <- mid
+      }
+    }
+
+    return((low + high) / 2)
+  }
+  
+  neg_idx <- which(pz < 0)
+  signif_viol <- vapply(
+    neg_idx,
+    function(i) {
+      
+      coefs <- A_inv_xy[i, ]
+      n_terms <- sum(coefs != 0)
+      
+      pr_best <- vapply(
+        seq_along(coefs),
+        function(j) {
+          if (coefs[j] == 0) return(0)
+          cmp_lub(phat = pr[j], n = nsamp, alpha = sig_lvl, lwr = coefs[j] < 0)
+        }, numeric(1L)
+      )
+      
+      sum(coefs * pr_best) < 0
+    }, logical(1L)
+  )
+  
+  if (any(signif_viol)) return(TRUE)
+  return(FALSE)
+}
+

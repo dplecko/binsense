@@ -2,6 +2,55 @@
 using namespace Rcpp;
 
 // [[Rcpp::export]]
+NumericMatrix cpp_A_xy(double fi_xy, int k) {
+  
+  NumericMatrix Axy(1<<k, 1<<k);
+  int i_bit, j_bit;
+  
+  for (int i = 0; i < (1<<k); ++i) {
+    
+    for (int j = 0; j < (1<<k); ++j) {
+      
+      Axy(i, j) = 1;
+      
+      for (int b = 0; b < k; ++b) {
+        
+        i_bit = (i & (1<<b)) > 0;
+        j_bit = (j & (1<<b)) > 0;
+        
+        if (i_bit > j_bit) {
+          Axy(i, j) = 0;
+          continue;
+        }
+        
+        if (i_bit == 1) Axy(i, j) *= (1 - fi_xy);
+        if (j_bit - i_bit == 1) Axy(i, j) *= fi_xy;
+      }
+      
+    }
+  }
+  
+  return Axy;
+}
+
+// [[Rcpp::export]]
+NumericMatrix cpp_invert_A_xy(NumericMatrix A, NumericVector pz, 
+                              NumericVector pr) {
+  
+  NumericMatrix B(A.nrow(), A.ncol());
+  
+  for (int i = 0; i < B.nrow(); ++i) {
+    
+    for (int j = 0; j < B.ncol(); ++j) {
+      
+      B(i, j) = A(j, i) * pz(i) / pr(j);
+    }
+  }
+  
+  return B;
+}
+
+// [[Rcpp::export]]
 NumericVector cpp_fi_grad(NumericMatrix Ainv, 
                           NumericVector neg_idx, NumericVector pr, 
                           NumericVector fi,
@@ -41,7 +90,7 @@ NumericVector cpp_fi_grad(NumericMatrix Ainv,
           der_ij_new = 1;
           
           for (int b = 0; b < k; ++b) {
-
+            
             i_bitb = (i & (1<<b)) > 0;
             j_bitb = (j & (1<<b)) > 0;
             bit_diff += j_bitb - i_bitb;
@@ -96,8 +145,6 @@ NumericVector cpp_fi_grad(NumericMatrix Ainv,
           
           if (bit_diff % 2) der_ij_new *= -1;
         }
-        
-        if (verbose) std::cout << der_ij << " vs. "<< der_ij_new << std::endl;
         
         fi_grad(ki) += der_ij * pr(j);
       }

@@ -5,3 +5,8 @@ data
 *.pdf
 *.tex
 *.html
+*.o
+paper/
+.Rproj.user
+op.Rproj
+.Rbuildignore
