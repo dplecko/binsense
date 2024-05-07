@@ -1,0 +1,23 @@
+<style>
+#myModal .modal-content {
+  max-width: 90% !important;
+  max-height: 90vh !important;
+  overflow: auto !important;
+}
+</style>
+
+<style>
+.grid-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); /* Adjust the minmax for your grid item size */
+  gap: 10px; /* Adjust the gap size as needed */
+  padding: 10px;
+}
+
+.grid-item {
+  background-color: #f0f0f0; /* Grid item background color */
+  border: 1px solid #ccc; /* Grid item border */
+  padding: 10px;
+  text-align: center;
+}
+</style>
