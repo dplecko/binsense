@@ -17,6 +17,8 @@ Suggests:
     latex2exp,
     assertthat,
     knitr,
-    rmarkdown
+    rmarkdown,
+    testthat (>= 3.0.0)
 LinkingTo: 
     Rcpp
+Config/testthat/edition: 3
