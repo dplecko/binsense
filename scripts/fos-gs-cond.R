@@ -14,7 +14,7 @@ X <- dat_lst$X[samp]
 Y <- dat_lst$Y[samp]
 
 # get the initial estimates of \Sigma, \lambda, \mu, \beta
-Sigma <- binsensate:::infer_Sigma(X, Y, R, list(list(0, 0), list(0, 0)))
+Sigma <- binsensate:::infer_Sigma_IM(X, Y, R, list(list(0, 0), list(0, 0)))
 fit_lmb <- function(X, Y, R) {
   xfit <- glm(X ~ ., data = data.frame(X = X, R = R), family = "binomial")
   lambda0 <- xfit$coefficients[-1]

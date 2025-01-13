@@ -3,40 +3,6 @@ title: "Non-parametric Inference of Fi-values"
 output: html_document
 ---
 
-<head>
-<script>
-function showModal(imageUrl) {
-  var modal = document.getElementById("myModal");
-  var modalImg = document.getElementById("img01");
-  modal.style.display = "block";
-  modalImg.src = imageUrl;
-}
-
-// When the user clicks anywhere outside of the modal, close it
-window.onclick = function(event) {
-  var modal = document.getElementById("myModal");
-  if (event.target == modal) {
-    modal.style.display = "none";
-  }
-}
-</script>
-<style>
-#myModal .modal-content {
-  max-width: 90% !important;
-  max-height: 90vh !important;
-  overflow: auto !important;
-}
-</style>
-</head>
-<body>
-
-<div id="myModal" class="modal">
-  <span class="close">&times;</span>
-  <img class="modal-content" id="img01">
-</div>
-
-<link rel="stylesheet" type="text/css" href="styles.css">
-
 ```{r setup, include=FALSE, message=FALSE}
 root <- rprojroot::find_root(rprojroot::has_dir(".git"))
 r_dir <- file.path(root, "r-utils")
@@ -62,51 +28,27 @@ fi_seq <- c(seq(0, 0.2, 0.05))
 ## Agnostic $\phi$-values
 
 We first explore agnostic $\phi$-values, meaning that the missingness pattern $\Phi = (\phi, \phi, \phi, \phi)$. We allow $\phi$ to vary within the sequence `r fi_seq`. 
-```{r nonpar-agnostic, fig.align='center'}
+```{r nonpar-agnostic}
 sns <- axis_search(X, Y, R, fi_seq, "agnostic", "backward", "ATE")
 df <- sns[["df"]]
 
 p_agnostic <- ggplot(df, aes(x = fi, y = val)) +
-    geom_line() + geom_point() +
-    xlab(tex("$\\phi$ value")) +
-    ylab("ATE") +
-    theme_bw() +
-    scale_y_continuous(labels = scales::percent)
+  geom_line() + geom_point() +
+  theme_bw() +
+  scale_y_continuous(labels = scales::percent) +
+  xlab(tex("$\\phi$ value")) +
+  ylab(tex("ATE$_{x_0, x_1}(y ; \\Phi = (\\phi, \\phi, \\phi, \\phi))$")) +
+  theme(axis.title = element_text(size = 12), 
+        axis.text = element_text(size = 10))
 ```
 
-```{r, echo=FALSE}
+```{r, fig.width=6, fig.height=4, fig.align='center', echo=FALSE}
+p_agnostic
 ggsave(file.path(root, "paper", "figures", "nonpar-agnostic.png"), 
        plot = p_agnostic, width = 6, height = 4)
 ```
 
-As noted in the manuscript, sometimes the missingness pattern $\Phi = (\phi, \phi, \phi, \phi)$ may yield $\hat{p}_{z \mid xy}$ estimates that have negative entries. For avoiding this, a gradient descent method is used to find the closest missingness pattern $\Phi$ for which this is not the case. Therefore, even though we set $\Phi = (\phi, \phi, \phi, \phi)$, the effective $\Phi$ that is used may differ somewhat, if the original inverse problem is ill-posed. Crucially, it is important to report the effective $\Phi$ profile.
-
-### Agnostic Profiles
-
-In the below list, the effective $\Phi$ values are given for each input value of $\phi$.
-
-<ul>
-```{r profiles, fig.align='center', results='asis', echo=FALSE}
-plot_dir <- "plots"
-if (!dir.exists("plots")) dir.create(plot_dir)
-
-# Iterate over fi_seq and save plots
-for (fi in fi_seq) {
-  
-  prof_idx <- which(fi_seq == fi)
-  plot_file <- sprintf("%s/plot_%s.png", plot_dir, fi)
-  
-  # Create and save the plot
-  p <- fi_prof(sns$res[[prof_idx]]$fi) + 
-    ggtitle(tex(paste("Profile for $\\phi=$", fi)))
-  ggsave(plot_file, plot = p, width = 6, height = 4)
-  
-  # Print clickable link
-  cat(sprintf('<li><a href="javascript:showModal(\'%s\');">Profile for value %s</a></li>', plot_file, fi))
-
-}
-```
-</ul>
+The agnostic $\phi$-value search does not point to a specific trend.
 
 ## $x$-specific $\phi$-values
 
@@ -122,58 +64,6 @@ grid_to_plt(fi_grid, "backward", "x")
 ```{r x-grid-save, echo=FALSE}
 ggsave(file.path(root, "paper", "figures", "nonpar-x.png"), 
        width = 6, height = 4)
-```
-
-### $x$-specific Profiles
-
-```{r profiles-grid, fig.align='center', results='asis', echo=FALSE}
-plot_dir <- "plots"
-if (!dir.exists("plots")) dir.create(plot_dir)
-
-cat(paste0("<style>
-.grid-container {
-  display: grid;
-  grid-template-columns: repeat(", length(fi_seq), ", 1fr);
-  gap: 10px;
-  padding: 10px;
-}
-.grid-item {
-  background-color: #f0f0f0;
-  border: 1px solid #ccc;
-  padding: 10px;
-  text-align: center;
-}
-</style>"))
-
-# Begin grid container
-cat("<div class='grid-container'>")
-
-cool_ord <- order(fi_grid$fi_x0y1, fi_grid$fi_x1y0, 
-                  decreasing = c(FALSE, TRUE))
-
-# Double for loop to iterate over fi_seq
-for (i in cool_ord) {
-  
-  fi_x0 <- fi_grid$fi_x0y0[i]
-  fi_x1 <- fi_grid$fi_x1y0[i]
-  prof_idx_x <- which(fi_seq == fi_x0)
-  prof_idx_y <- which(fi_seq == fi_x1)
-  plot_file <- sprintf("%s/plotX_%sx%s.png", plot_dir, fi_x0, fi_x1)
-
-  # Create and save the plot
-  p <- fi_prof(attr(fi_grid, "prof")[[i]]) + 
-      ggtitle(tex(
-        paste("Profile for $\\phi_{x_0}=$", fi_x0, " $\\phi_{x_1}=$", fi_x1)
-      ))
-  ggsave(plot_file, plot = p, width = 6, height = 4)
-
-  # Print clickable grid item
-  cat(sprintf("<div class='grid-item'><a href='javascript:showModal(\"%s\");'>\\(\\phi_{x_0} = %s\\) <br> \\(\\phi_{x_1} = %s\\)</a></div>", plot_file, fi_x0, fi_x1))
-
-}
-
-# End grid container
-cat("</div>")
 ```
 
 ## $y$-specific $\phi$-values
@@ -192,44 +82,6 @@ ggsave(file.path(root, "paper", "figures", "nonpar-y.png"),
        width = 6, height = 4)
 ```
 
-### $y$-specific Profiles
-
-```{r y-profiles-grid, fig.align='center', results='asis', echo=FALSE}
-plot_dir <- "plots"
-if (!dir.exists("plots")) dir.create(plot_dir)
-
-# Begin grid container
-cat("<div class='grid-container'>")
-
-cool_ord <- order(yfi_grid$fi_x0y0, yfi_grid$fi_x0y1, 
-                  decreasing = c(FALSE, TRUE))
-
-# Double for loop to iterate over fi_seq
-for (i in cool_ord) {
-  
-  fi_y0 <- yfi_grid$fi_x0y0[i]
-  fi_y1 <- yfi_grid$fi_x0y1[i]
-  prof_idx_x <- which(fi_seq == fi_y0)
-  prof_idx_y <- which(fi_seq == fi_y1)
-  plot_file <- sprintf("%s/plotY_%sx%s.png", plot_dir, fi_y0, fi_y1)
-
-  # Create and save the plot
-  p <- fi_prof(attr(yfi_grid, "prof")[[i]]) + 
-      ggtitle(tex(
-        paste("Profile for $\\phi_{y_0}=$", fi_y0, " $\\phi_{y_1}=$", fi_y1)
-      ))
-  ggsave(plot_file, plot = p, width = 6, height = 4)
-
-  # Print clickable grid item
-  cat(sprintf("<div class='grid-item'><a href='javascript:showModal(\"%s\");'>\\(\\phi_{y_0} = %s\\) <br> \\(\\phi_{y_1} = %s\\)</a></div>", plot_file, fi_y0, fi_y1))
-
-}
-
-# End grid container
-cat("</div>")
-```
-
-
 ## $x$-specific $\phi$-values with Confidence Intervals
 
 As the above results demonstrate, the most likely $\phi$-value is $x$-specific, with $\phi_{x_0}$ increasing and $\phi_{x_1}$ fixed. We first perform estimation of the ATE along this direction over multiple bootstrap repetitions.
@@ -241,12 +93,16 @@ axs_dat <- axis_search(X, Y, R, fi_seq, type = "x", solver = "backward",
                        nboot = nboot)[["df"]]
 
 ggplot(axs_dat, aes(x = fi, y = mid)) +
+  geom_hline(yintercept = 0, color = "gray", 
+             linetype = "dotted", linewidth = 1) +
   geom_point() + geom_line() +
   geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.3) +
   theme_bw() +
   xlab(tex("$\\phi_{x_0}")) +
   scale_y_continuous(labels = scales::percent) +
-  ylab(tex("ATE$_{x_0, x_1}(y ; \\Phi = (\\phi_{x_0}, 0, \\phi_{x_0}, 0))$"))
+  ylab(tex("ATE$_{x_0, x_1}(y ; \\Phi = (\\phi_{x_0}, 0, \\phi_{x_0}, 0))$")) +
+  theme(axis.title = element_text(size = 12), 
+        axis.text = element_text(size = 10))
 ```
 
 ```{r x-axis-ci, echo=FALSE}
@@ -263,7 +119,7 @@ We now investigate the performance of our inference method applied to data from 
 
 ```{r infer-Sigma}
 # infer the Sigma assuming \Phi = (0, 0, 0, 0)
-Sigma_mim0 <- binsensate:::infer_Sigma(
+Sigma_mim0 <- binsensate:::infer_Sigma_IM(
   X, Y, R, fi = list(list(0, 0), list(0, 0))
 )
 ```
@@ -336,6 +192,8 @@ df <- data.frame(fi = fi_seq, smooth = ate_seq)
 
 # check the correctness of inference
 ggplot(plot_dat, aes(x = fi, y = mid)) +
+  geom_hline(yintercept = 0, color = "gray", 
+             linetype = "dotted", linewidth = 1) +
   geom_line(aes(color = "Estimated")) + 
   geom_point(aes(color = "Estimated")) +
   geom_ribbon(aes(ymin = lwr, ymax = upr),
@@ -350,8 +208,10 @@ ggplot(plot_dat, aes(x = fi, y = mid)) +
   ) +
   scale_y_continuous(labels = scales::percent) +
   theme(
-    legend.position = c(0.2, 0.8),
-    legend.box.background = element_rect()
+    legend.position = "inside",
+    legend.position.inside = c(0.2, 0.8),
+    legend.box.background = element_rect(),
+    axis.title = element_text(size = 12), axis.text = element_text(size = 10)
   ) +
   xlab(tex("$\\phi_{x_0}")) +
   ylab(tex("ATE$_{x_0, x_1}(y ; \\Phi = (\\phi_{x_0}, 0, \\phi_{x_0}, 0))$"))

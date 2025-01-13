@@ -52,32 +52,6 @@ axis_search <- function(X, Y, R, fi_seq, type, solver, scale = "ATE",
   list(df = df, res = res)
 }
 
-
-rng_to_df <- function(type, ...) {
-  
-  if (type == "agnostic") {
-    
-    df <- data.frame(type = rep(type, length(list(...)[[1]])))
-    df$fi_x0y0 <- df$fi_x1y0 <- df$fi_x0y1 <- df$fi_x1y1 <- list(...)[[1]]
-  } else if (type == "x") {
-    
-    fi_grid <- expand.grid(a = list(...)[[1]], b = list(...)[[2]])
-    
-    df <- data.frame(type = rep(type, nrow(fi_grid)))
-    df$fi_x0y0 <- df$fi_x0y1 <- fi_grid$a
-    df$fi_x1y0 <- df$fi_x1y1 <- fi_grid$b
-  } else {
-    
-    fi_grid <- expand.grid(a = list(...)[[1]], b = list(...)[[2]])
-    
-    df <- data.frame(type = rep(type, nrow(fi_grid)))
-    df$fi_x0y0 <- df$fi_x1y0 <- fi_grid$a
-    df$fi_x0y1 <- df$fi_x1y1 <- fi_grid$b
-  }
-  
-  df
-}
-
 grid_search <- function(fi_grid, solver) {
   
   grid <- cbind(fi_grid, solver = solver)
@@ -105,48 +79,62 @@ grid_search <- function(fi_grid, solver) {
   grid
 }
 
-grid_to_plt <- function(lgrid, slvr, type) {
+grid_to_plt <- function(lgrid, pattern, method) {
   
-  if (type == "agnostic") {
+  to_model <- function(method) 
+    if (method == "IM") "Independent Missingness" else "Zero-Inflated"
+  
+  model <- to_model(method)
+  
+  if (pattern == "agn") {
     
-    agn <- ggplot(subset(lgrid, type == "agnostic"), 
-                  aes(x = fi_x0y0, y = ate)) + 
+    agn <- ggplot(subset(lgrid, pattern == "agn"), 
+                  aes(x = fi_x0y0, y = ATE)) + 
       geom_point() + geom_line() +
       theme_bw() +
-      xlab(latex2exp::TeX("$\\phi$")) + ylab("ATE") +
-      scale_y_continuous(labels = scales::percent)
+      xlab(latex2exp::TeX(paste0("$\\phi$", " (", model, ")"))) + 
+      ylab(latex2exp::TeX(
+        "ATE$_{x_0, x_1}(y ; \\Phi = (\\phi, \\phi, \\phi, \\phi))$"
+      )) +
+      scale_y_continuous(labels = scales::percent) +
+      theme(axis.title = element_text(size = 12), 
+            axis.text = element_text(size = 10))
     
     return(agn)
   }
   
-  if (type == "x") {
-    
-    trt <- ggplot(subset(lgrid, type == "x"), 
+  if (pattern == "x") {
+
+    trt <- ggplot(subset(lgrid, pattern == "x"), 
                   aes(x = fi_x0y0, y = fi_x1y0)) + 
-      geom_tile(aes(fill = ate), color = 'white') +
+      geom_tile(aes(fill = ATE), color = 'white') +
       # scale_fill_gradient2(low="blue", high="red", mid="white", midpoint=0) +
       theme_bw() + 
       labs(fill="ATE") +
       scale_fill_viridis_c(label = scales::label_percent()) +
-      geom_text(aes(label=sprintf("%.2f%%", 100 * ate)), vjust=1) +
-      xlab(latex2exp::TeX("$\\phi_{x_0}$")) + 
-      ylab(latex2exp::TeX("$\\phi_{x_1}$"))
+      geom_text(aes(label=sprintf("%.2f%%", 100 * ATE)), vjust=1) +
+      xlab(latex2exp::TeX(paste0("$\\phi_{x_0}$", " (", model, ")"))) + 
+      ylab(latex2exp::TeX(paste0("$\\phi_{x_1}$", " (", model, ")"))) +
+      theme(axis.title = element_text(size = 12), 
+            axis.text = element_text(size = 10))
     
     return(trt)
   }
   
-  if (type == "y") {
+  if (pattern == "y") {
     
-    out <- ggplot(subset(lgrid, type == "y"), 
+    out <- ggplot(subset(lgrid, pattern == "y"), 
                   aes(x = fi_x0y0, y = fi_x0y1)) + 
-      geom_tile(aes(fill = ate), color = 'white') +
+      geom_tile(aes(fill = ATE), color = 'white') +
       # scale_fill_gradient2(low="blue", high="red", mid="white", midpoint=0) +
       theme_bw() + 
       labs(fill="ATE") + 
       scale_fill_viridis_c(label = scales::label_percent()) +
-      geom_text(aes(label=sprintf("%.2f%%", 100 * ate)), vjust=1) +
-      xlab(latex2exp::TeX("$\\phi_{y_0}$")) + 
-      ylab(latex2exp::TeX("$\\phi_{y_1}$"))
+      geom_text(aes(label=sprintf("%.2f%%", 100 * ATE)), vjust=1) +
+      xlab(latex2exp::TeX(paste0("$\\phi_{y_0}$", " (", model, ")"))) + 
+      ylab(latex2exp::TeX(paste0("$\\phi_{y_1}$", " (", model, ")"))) +
+      theme(axis.title = element_text(size = 12), 
+            axis.text = element_text(size = 10))
     
     return(out)
   }

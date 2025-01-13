@@ -128,6 +128,41 @@ elixhauser_cb <- function(sex, ...) {
   res
 }
 
+miiv_elix_wide <- function(x, ...) {
+  
+  ch9 <- icd9_comorbid_elix(x[icd_version == 9])
+  ch10 <- icd10_comorbid_elix(x[icd_version == 10])
+  
+  make_wide <- function(x, id_name) {
+    
+    res <- id_tbl(id = as.integer(rownames(x)))
+    res <- cbind(res, x)
+    res <- rename_cols(res, id_name, "id")
+    res
+  }
+  
+  w9 <- make_wide(ch9, id_vars(x))
+  w10 <- make_wide(ch10, id_vars(x))
+  
+  w_all <- rbind(w9, w10)
+  w_all <- w_all[, lapply(.SD, max), by = c(id_vars(w_all))]
+  save(w_all, file = file.path(root, "data", "miiv_elix_wide.rda"))
+  w_all[, icd_code := rowSums(w_all[, -c(id_vars(w_all)), with=FALSE])]
+}
+
+wide_elix <- function(elix_all, ...) {
+  
+  res <- merge(elix_all, get_elix())
+  res <- rename_cols(res, "elix_wide", "elix_all")
+  res
+}
+
+get_elix <- function(src = "miiv") {
+  
+  load(file.path(root, "data", "miiv_elix_wide.rda"))
+  w_all
+}
+
 bmi_all_cb <- function(bmi, bmi_omr, ...) {
   
   bmi <- rename_cols(bmi, "bmi_all", "bmi")

@@ -1,10 +1,8 @@
 
 root <- rprojroot::find_root(rprojroot::has_dir(".git"))
-r_dir <- file.path(root, "r")
+r_dir <- file.path(root, "r-utils")
 invisible(lapply(list.files(r_dir, full.names = TRUE, recursive = TRUE), 
                  source))
-cpp_dir <- file.path(root, "cpp")
-invisible(lapply(list.files(cpp_dir, full.names = TRUE), sourceCpp))
 
 # for MIMIC-IV, OMR data is loaded on id_type = "patient" granularity
 # Elixhauser score is derived from diagnoses_icd table
@@ -43,28 +41,16 @@ cowplot::plot_grid(
   ncol = 1L
 )
 
-# hypertension / diabetes + protective effect
-
-ggplot(
-  data, aes(x = bmi_all, fill = factor(DM))
-) + geom_density(alpha = 0.3) + theme_bw() +
-  xlim(c(0, 50))
-
-# do these negative coefficients disappear once you condition age?
-# => yes, they do (partly)
-
-# tipping over hypothesis is the most likely explanation for negative coefficients
+# tipping over hypothesis is the most likely explanation for negative coefs
 # or association of HTN with obesity / fat mass / protective effect
 
 # final task: get a top list of features
 freq <- freq[order(freq$cnt, decreasing = TRUE), ]
 freq <- freq[order(freq$coef, decreasing = TRUE), ]
 
-
 # make a list of 5-10 features
 # criterion: all with coef > 0.2, all with prevalence > 0.1 and coef > 0.05
 cmb_sel <- freq[freq$coef > 0.2 | (freq$cnt > 0.1 & freq$coef > 0.1), ]$condition
-# how many features is this?
 
 # compute fi_crit
 fi_crit <- function(r) {
@@ -94,7 +80,8 @@ anz_dat[,  anz_score := rowSums(.SD), .SDcols = anz_cmbs]
 
 anz_freq <- anz_dat[, mean(anz_score), by = "site"]
 anz_freq$site <- factor(anz_freq$site, 
-                        levels = anz_freq$site[order(anz_freq$V1, decreasing = TRUE)])
+                        levels = anz_freq$site[order(anz_freq$V1, 
+                                                     decreasing = TRUE)])
 ggplot(anz_freq, aes(x = site, y = V1)) +
   geom_col() + theme_bw()
 

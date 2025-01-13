@@ -42,8 +42,20 @@ grid_multi_plt(fi_grid, "two-stage-em")
 ```
 
 ```{r x-grid-save, echo=FALSE}
-ggsave(file.path(root, "paper", "figures", "par-agn-x-y.png"), 
-       width = 18, height = 4)
+# obtain the three plots (agnostic, x, y)
+
+p_agn <- grid_to_plt(fi_grid[fi_grid$type == "agnostic", ], "two-stage-em",
+                     "agnostic")
+ggsave(file.path(root, "paper", "figures", "par-agnostic.png"),
+       p_agn, width = 6, height = 4)
+
+p_x <- grid_to_plt(fi_grid[fi_grid$type == "x", ], "two-stage-em", "x")
+ggsave(file.path(root, "paper", "figures", "par-x.png"), 
+       p_x, width = 6, height = 4)
+
+p_y <- grid_to_plt(fi_grid[fi_grid$type == "y", ], "two-stage-em", "y")
+ggsave(file.path(root, "paper", "figures", "par-y.png"), 
+       p_y, width = 6, height = 4)
 ```
 
 As the above plots demonstrate, the only possible $\phi$-value that would plausibly reverse the sign of the causal effect estimate in the data seems to be $x$-specific, in the direction of $\phi_{x_1} = 0$ and $\phi_{x_0}$ increasing.
@@ -65,7 +77,9 @@ ggplot(axs_dat, aes(x = fi, y = mid)) +
   theme_bw() +
   scale_y_continuous(labels = scales::percent) +
   xlab(tex("$\\phi_{x_0}")) +
-  ylab(tex("ATE$_{x_0, x_1}(y ; \\Phi = (\\phi_{x_0}, 0, \\phi_{x_0}, 0))$"))
+  ylab(tex("ATE$_{x_0, x_1}(y ; \\Phi = (\\phi_{x_0}, 0, \\phi_{x_0}, 0))$")) +
+  theme(axis.title = element_text(size = 12), 
+        axis.text = element_text(size = 10))
 ```
 
 ```{r x-axis-ci, echo=FALSE}
@@ -82,7 +96,7 @@ In the sequel, we investigate the performance of our inference method along this
 
 ```{r infer-Sigma}
 # infer the Sigma assuming \Phi = (0, 0, 0, 0)
-Sigma_mim0 <- binsensate:::infer_Sigma(
+Sigma_mim0 <- binsensate:::infer_Sigma_IM(
   X, Y, R, fi = list(list(0, 0), list(0, 0))
 )
 ```
@@ -169,8 +183,11 @@ ggplot(plot_dat, aes(x = fi, y = mid)) +
     labels = c("Estimated", "Ground Truth")
   ) +
   theme(
-    legend.position = c(0.25, 0.8),
-    legend.box.background = element_rect()
+    legend.position = "inside",
+    legend.position.inside = c(0.25, 0.8),
+    legend.box.background = element_rect(),
+    axis.title = element_text(size = 12), 
+    axis.text = element_text(size = 10)
   ) +
   xlab(tex("$\\phi_{x_0}")) +
   scale_y_continuous(labels = scales::percent) +

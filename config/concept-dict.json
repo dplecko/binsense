@@ -290,6 +290,27 @@
     "class": "rec_cncpt",
     "target": "id_tbl"
   },
+  "elix_all": {
+    "target": "id_tbl",
+    "sources": {
+      "miiv": [
+        {
+          "ids": [9, 10],
+          "table": "diagnoses_icd",
+          "val_var": "icd_code",
+          "sub_var": "icd_version",
+          "callback": "miiv_elix_wide"
+        }
+      ]
+    }
+  },
+  "elix_wide": {
+    "concepts": ["elix_all"],
+    "description": "BMI (binary)",
+    "callback": "wide_elix",
+    "class": "rec_cncpt",
+    "target": "id_tbl"
+  },
   "bmi_all": {
     "concepts": ["bmi", "bmi_omr"],
     "callback": "bmi_all_cb",
