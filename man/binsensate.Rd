@@ -4,7 +4,16 @@
 \alias{binsensate}
 \title{Binary Sensitivity Analysis}
 \usage{
-binsensate(X, Y, R, fi, solver = c("backward", "two-stage-em"), ...)
+binsensate(
+  X,
+  Y,
+  R,
+  fi,
+  method = c("IM", "ZINF"),
+  A = NULL,
+  solver = c("backward", "two-stage-em"),
+  ...
+)
 }
 \arguments{
 \item{X}{The treatment variable (vector with 0/1 entries).}
@@ -18,6 +27,11 @@ entries).}
 of which are lists. The entry \code{fi[[1+x]][[1+y]]} contains the sensitivity
 parameter corresponding to the probability that a confounder is unobserved for
 the specific value of X = x, Y = y.}
+
+\item{A}{Sensitivity parameters that  List with two entries, both
+of which are lists. The entry \code{A[[1+x]][[1+y]]} contains the entries of the
+fidelity matrix A_xy for X = x, Y = y. Default to NULL (in which case) \code{fi} is
+used to infer the value of A_xy.}
 
 \item{solver}{Character scalar describing the solution method,
 either \code{"backward"} (non-parametric approach)

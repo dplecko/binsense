@@ -11,31 +11,47 @@
 #' of which are lists. The entry `fi[[1+x]][[1+y]]` contains the sensitivity 
 #' parameter corresponding to the probability that a confounder is unobserved for
 #' the specific value of X = x, Y = y.
-#' @param solver Character scalar describing the solution method, 
+#' @param A Sensitivity parameters that  List with two entries, both 
+#' of which are lists. The entry `A[[1+x]][[1+y]]` contains the entries of the 
+#' fidelity matrix A_xy for X = x, Y = y. Default to NULL (in which case) `fi` is
+#' used to infer the value of A_xy.
+#'@param solver Character scalar describing the solution method, 
 #' either `"backward"` (non-parametric approach) 
 #' or `"two-stage-em"` (parametric EM).
 #' @param ... Further arguments passed to subroutine \code{\link{two_stage_em}}.
 #' @importFrom Rcpp sourceCpp
 #' @useDynLib binsensate
 #' @export
-binsensate <- function(X, Y, R, fi, 
+binsensate <- function(X, Y, R, fi, method = c("IM", "ZINF"), A = NULL,
                        solver = c("backward", "two-stage-em"), ...) {
   
   solver <- match.arg(solver, c("backward", "two-stage-em"))
   
+  if (!is.null(A)) {
+    
+    fi <- NULL
+    method <- "matrix"
+    if (is.matrix(A)) A <- list(list(A, A), list(A, A))
+  } else {
+    
+    # if agnostic fi, create a list
+    if (!is.list(fi)) fi <- list(list(fi, fi), list(fi, fi))
+    fi <- expand_fi(fi, ncol(R), method)
+    A <- fi_to_A(fi, ncol(R), method)
+  }
+  
   switch(
     solver,
-    backward = backward_solver(X, Y, R, fi),
-    `two-stage-em` = two_stage_em(X, Y, R, fi, ...)
+    backward = backward_solver(X, Y, R, fi, method, A),
+    `two-stage-em` = two_stage_em(X, Y, R, fi, method, A, ...)
   )
 }
-
 
 #' Non-Parametric Binary Sensitivity Analysis
 #' 
 #' @inheritParams binsensate
 #' @export
-backward_solver <- function(X, Y, R, fi) {
+backward_solver <- function(X, Y, R, fi, method, A) {
   
   k <- ncol(R)
   enc_mat <- t(replicate(nrow(R), 2^(seq_len(k) - 1L)))
@@ -44,12 +60,6 @@ backward_solver <- function(X, Y, R, fi) {
   
   x0 <- y0 <- 0
   x1 <- y1 <- 1
-  
-  # expand fi if needed
-  for (x in c(T, F))
-    for (y in c(T, F))
-      if (length(fi[[x + 1]][[y + 1]]) == 1 & k > 1) 
-        fi[[x + 1]][[y + 1]] <- rep(fi[[x + 1]][[y + 1]], k)
   
   for (x in c(T, F)) {
     
@@ -65,41 +75,53 @@ backward_solver <- function(X, Y, R, fi) {
       cprxy <- c(cprxy, rep(0L, 2^k - length(cprxy))) # zero-padding
       cprxy <- cprxy / sum(cprxy)
       
-      pxy[[x + 1]][[y + 1]] <- nrow(R[idx, , drop = FALSE]) / nrow(R)
+      # get P(x, y) weights
+      pxy[[x + 1]][[y + 1]] <- mean(idx)
+      
+      # get the bin-counting P(r | x, y) estimator
       pr[[x + 1]][[y + 1]] <- cprxy
       
-      pz[[x + 1]][[y + 1]] <- 
-        vapply(
-          seq_len(2^k),
-          function(z) infer_pz(z, pr[[x + 1]][[y + 1]], fi[[x + 1]][[y + 1]], k),
-          numeric(1L)
-        )
+      # obtain the inverse of the matrix
+      if (is.element(method, c("IM", "ZINF"))) {
+        
+        A_inv_xy <- fi_to_Ainv_xy(fi[[1+x]][[1+y]], k, method)
+      } else A_inv_xy <- solve(A[[1+x]][[1+y]])
       
+      # obtain P(z | x,y) estimator using matrix inversion
+      pz[[x + 1]][[y + 1]] <- A_inv_xy %*% pr[[x + 1]][[y + 1]]
+      
+      # perform simplex check for IM family
       if (check_simplex(pz[[x + 1]][[y + 1]])) {
         
         initial <- pz[[x + 1]][[y + 1]]
-        A_inv_xy <- lapply(
-          seq_len(2^k),
-          function(z) infer_pz(z, pr[[x + 1]][[y + 1]], 
-                               fi[[x + 1]][[y + 1]], k, 
-                               TRUE)
-        )
-        A_inv_xy <- do.call(rbind, A_inv_xy)
         
         # check if ill-posedness is statistically significant
         if (ill_pose_sig(pz[[x + 1]][[y + 1]], pr[[x + 1]][[y + 1]], 
                          A_inv_xy, nsamp = sum(idx))) {
           
-          # trade for a well-posed inverse problem
-          fi_new <- trade_inv_prob(pz[[x + 1]][[y + 1]], 
-                                   pr[[x + 1]][[y + 1]], 
-                                   A_inv_xy, fi[[x + 1]][[y + 1]])
-          
-          # re-run with new fi
-          fi_new <- fi_trade(fi, fi_new, x, y)
-          return(
-            backward_solver(X, Y, R, fi_new)
-          )
+          # update parameters to more appropriate values for IM method
+          if (method == "IM") { 
+            
+            # trade for a well-posed inverse problem
+            fi_new <- trade_inv_prob(pz[[x + 1]][[y + 1]], 
+                                     pr[[x + 1]][[y + 1]], 
+                                     A_inv_xy, fi[[x + 1]][[y + 1]])
+            
+            # re-run with new fi
+            fi_new <- fi_trade(fi, fi_new, x, y)
+            Anew <- fi_to_A(fi_new, k, method)
+            return(
+              backward_solver(X, Y, R, fi_new, method, Anew)
+            )
+          } else { # for other methods
+            
+            stop(
+              paste(
+                "Sensitivity parameter likely not compatible with observed data.\n",
+                " Try adjusting the parameter to a smaller value."
+              )
+            )
+          }
         } else {
           
           neg_idx <- pz[[x + 1]][[y + 1]] < 0
@@ -110,6 +132,7 @@ backward_solver <- function(X, Y, R, fi) {
     }
   }
   
+  # get the marginal P(z)
   pz_inf <- rep(0, 2^k)
   for (x in c(T, F)) {
     for (y in c(T, F)) {
@@ -117,11 +140,13 @@ backward_solver <- function(X, Y, R, fi) {
     }
   }
   
+  # compute P(y | x_1, z) (vectorized)
   py_x1z <- pz[[x1 + 1]][[y1 + 1]] * pxy[[x1 + 1]][[y1 + 1]] / (
     pz[[x1 + 1]][[y1 + 1]] * pxy[[x1 + 1]][[y1 + 1]] + 
       pz[[x1 + 1]][[y0 + 1]] * pxy[[x1 + 1]][[y0 + 1]]
   )
   
+  # compute P(y | x_0, z) (vectorized)
   py_x0z <- pz[[x0 + 1]][[y1 + 1]] * pxy[[x0 + 1]][[y1 + 1]] / (
     pz[[x0 + 1]][[y1 + 1]] * pxy[[x0 + 1]][[y1 + 1]] + 
       pz[[x0 + 1]][[y0 + 1]] * pxy[[x0 + 1]][[y0 + 1]]
@@ -147,15 +172,25 @@ backward_solver <- function(X, Y, R, fi) {
 #' a random initialization. Defaults to `FALSE`.
 #' @importFrom stats glm runif
 #' @export
-two_stage_em <- function(X, Y, R, fi, mc_per_samp = 10, n_epoch = 10, 
+two_stage_em <- function(X, Y, R, fi, method, A, mc_per_samp = 10, n_epoch = 10, 
                          rand_init = FALSE) {
   
   # Step (0) - infer Sigma
-  lmb <- list()
+  lmb <- Sigma <- list()
   
-  Sigma <- infer_Sigma(X, Y, R, fi)
+  k <- ncol(R)
   
-  pz <- cpp_scaling_2d(Sigma)
+  if (method == "IM") { # for IM method, infer Sigma using method of moments
+    
+    Sigma[[1]] <- infer_Sigma_IM(X, Y, R, fi)
+  } else { # if method not IM, infer Sigma from the R correlation matrix
+    
+    cor_mat <- t(R) %*% R / nrow(R)
+    Sigma[[1]] <- tail(cormat_to_Sigma(cor_mat), n = 1L)[[1]]
+  }
+  
+  # get initial pz
+  pz <- cpp_scaling_2d(Sigma[[1]])
   pz <- pz / sum(pz)
   
   # Step (0+) - infer initial lambda, mu, beta
@@ -190,7 +225,6 @@ two_stage_em <- function(X, Y, R, fi, mc_per_samp = 10, n_epoch = 10,
   for (i in seq_len(n_epoch)) {
     
     # get px_z, py_z
-    
     px_z <- expit(cpp_p_z(lmb[[i]]$lambda) + lmb[[i]]$lambda_icept)
     logity_z <- cpp_p_z(lmb[[i]]$mu) + lmb[[i]]$mu_icept
     beta <- lmb[[i]]$beta
@@ -204,7 +238,10 @@ two_stage_em <- function(X, Y, R, fi, mc_per_samp = 10, n_epoch = 10,
         y <- Y[j]
         r <- R[j, ]
         
-        pr_zxy <- cpp_bit_fi_hash(r, fi[[1 + x]][[1 + y]])
+        r_idx <- 1 + sum(r * 2^(seq_len(k)-1))
+        
+        # P(r | z, x, y) conditionals
+        pr_zxy <- A[[1 + x]][[1 + y]][r_idx, ]
         
         if (x == 1) px <- px_z else px <- 1 - px_z
         
@@ -214,14 +251,28 @@ two_stage_em <- function(X, Y, R, fi, mc_per_samp = 10, n_epoch = 10,
         probs <- pz * px * py * pr_zxy
         probs <- probs / sum(probs)
         
-        r_mc_idx <- sample(length(probs), size = mc_per_samp, prob = probs,
+        z_mc_idx <- sample(length(probs), size = mc_per_samp, prob = probs,
                            replace = TRUE)
-        r_mc <- cpp_idx_to_bit(r_mc_idx - 1, length(r)) # returns a matrix
+        z_mc <- cpp_idx_to_bit(z_mc_idx - 1, length(r)) # returns a matrix
         
-        cbind(X = x, Y = y, R = r_mc)
+        cbind(X = x, Y = y, Z = z_mc)
       }
     )
     mc_twist <- as.data.frame(do.call(rbind, mc_twist))
+    
+    # re-fit for Sigma
+    if (!(method == "IM")) {
+      
+      Z_mc <- as.matrix(mc_twist[, -c(1, 2)])
+      cor_mat <- t(Z_mc) %*% Z_mc / nrow(Z_mc)
+      Sigma[[i+1]] <- tail(cormat_to_Sigma(cor_mat), n = 1L)[[1]]
+    } else { # in the case of independent missingess, do not need to update Sigma
+      
+      Sigma[[i+1]] <- Sigma[[i]]
+    }
+    
+    pz <- cpp_scaling_2d(Sigma[[i+1]])
+    pz <- pz / sum(pz)
     
     # re-fit for lambda, mu, beta
     lmb[[i+1]] <- fit_lmb(mc_twist[, 1], mc_twist[, 2], mc_twist[, -c(1, 2)])
@@ -243,7 +294,7 @@ two_stage_em <- function(X, Y, R, fi, mc_per_samp = 10, n_epoch = 10,
   list(
     pz = pz,
     ATE = sum( (expit(logity_z + beta) - expit(logity_z)) * pz),
-    solver = "two-stage-em",
+    solver = "two-stage-ecm",
     Sigma = Sigma,
     beta = beta,
     theta = lmb

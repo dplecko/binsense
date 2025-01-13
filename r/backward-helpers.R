@@ -1,51 +1,4 @@
 
-A_xy <- function(fi_xy, k, order = Inf) {
-  
-  Axy <- array(0, dim = c(2^k, 2^k))
-  
-  for (i in seq_len(2^k)) {
-    
-    for (j in seq_len(2^k)) {
-      
-      i_bin <- as.integer(intToBits(i-1))
-      j_bin <- as.integer(intToBits(j-1))
-      
-      if (any(i_bin > j_bin)) next
-      if (all(i_bin == j_bin)) next
-      if (sum(j_bin - i_bin) > order) next
-      Axy[i, j] <- fi_xy^sum(j_bin - i_bin) * (1 - fi_xy)^sum(i_bin)
-      
-    }
-  }
-  
-  Axy <- Axy + diag(1 - colSums(Axy))
-  
-  assertthat::assert_that(!is.element(0, eigen(Axy)$values),
-                          msg = "Singular transition matrix")
-  
-  Axy
-}
-
-invert_A_xy <- function(A, pz, pr) {
-  
-  B <- array(0, dim = dim(A))
-  k <- as.integer(log(nrow(B), 2))
-  
-  for (i in seq_len(2^k)) {
-    
-    for (j in seq_len(2^k)) {
-      
-      i_bin <- as.integer(intToBits(i-1))
-      j_bin <- as.integer(intToBits(j-1))
-      
-      B[i, j] <- A[j, i] * pz[i] / pr[j]
-      
-    }
-  }
-  
-  B
-}
-
 #' @importFrom utils combn
 infer_pz <- function(z, pr, phi, k, weights = FALSE) {
   
@@ -112,7 +65,7 @@ trade_inv_prob <- function(pz, pr, Ainv, fi) {
     alpha <- min(min(fi / abs(fi_grad), na.rm = TRUE), 1)
     gain <- -Inf
     c <- 1/2
-    cat("Init alpha =", alpha, ";")
+    message("Init alpha =", alpha, ";")
     while( gain < c * alpha * sum(fi_grad^2) ) {
       
       alpha <- alpha / 2
@@ -142,7 +95,7 @@ trade_inv_prob <- function(pz, pr, Ainv, fi) {
       seq_len(2^k),
       function(z) infer_pz(z, pr, fi, k, TRUE)
     ))
-    cat("Sum of negatives", sum(pz[pz < 0]), "\n")
+    message("Sum of negatives", sum(pz[pz < 0]), "\n")
     if(abs(sum(pz[pz < 0])) < 10^(-5)) break
   }
   
@@ -208,8 +161,8 @@ check_simplex <- function(pzx) {
 #' @importFrom stats pbinom
 ill_pose_sig <- function(pz, pr, A_inv_xy, nsamp, sig_lvl = 0.01) {
   
+  # compute lower/upper bound based on a finite sample
   cmp_lub <- function(phat, n, alpha, lwr) {
-    
     
     tol <- 0.001
     low <- 0
@@ -217,10 +170,12 @@ ill_pose_sig <- function(pz, pr, A_inv_xy, nsamp, sig_lvl = 0.01) {
     while (high - low > tol) {
       mid <- (low + high) / 2
       
-      if (pbinom(n * phat, size = n, prob = mid, lower.tail = !lwr) > alpha & !lwr) {
-        low <- mid
+      if (pbinom(n * phat, size = n, prob = mid, lower.tail = !lwr) > alpha) {
+        
+        if (!lwr) low <- mid else high <- mid
       } else {
-        high <- mid
+        
+        if (!lwr) high <- mid else low <- mid
       }
     }
 

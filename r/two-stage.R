@@ -1,6 +1,12 @@
 
 #' @importFrom utils tail
-infer_Sigma <- function(X, Y, R, fi) {
+infer_Sigma_IM <- function(X, Y, R, fi) {
+  
+  cor_mat <- XYR_to_cormat(X, Y, R, fi)
+  tail(cormat_to_Sigma(cor_mat), n = 1)[[1]]
+}
+
+XYR_to_cormat <- function(X, Y, R, fi) {
   
   k <- ncol(R)
   mu_hat <- array(0, dim = c(k, k))
@@ -13,33 +19,39 @@ infer_Sigma <- function(X, Y, R, fi) {
       Rxy <- R[idx, , drop = FALSE]
       
       fixy <- fi[[1+x]][[1+y]]
-      fi_mat <- array((1-fixy)^2, dim = c(k, k))
-      diag(fi_mat) <- 1-fixy
+      if (length(fixy) == 1 & ncol(R) > 1) fixy <- rep(fixy, ncol(R))
+      
+      fi_mat <- (1 - fixy) %*% t(1-fixy)
+      diag(fi_mat) <- 1 - fixy
       
       mu_hat <- mu_hat + (t(Rxy) %*% Rxy / nrow(Rxy) / fi_mat) * mean(idx)
     }
   }
   
-  attr(mu_hat, "cor_mat") <- TRUE
-  tail(r_descent_2d(array(0, dim = c(k, k)), r = mu_hat, fi = fi), n = 1)[[1]]
+  mu_hat
 }
 
-r_descent_2d <- function(Sigma, r, fi, n_iter = 100, multistep = FALSE,
-                         verbose = FALSE) {
+cormat_to_Sigma <- function(cor_mat, n_iter = 100, multistep = FALSE, verbose = FALSE) {
   
+  # get dimension k based on the cor_mat
+  k <- ncol(cor_mat)
+  
+  # initiate the list for each step
   Sigma_t <- list()
-  Sigma_t[[1]] <- Sigma
+  Sigma_t[[1]] <- array(0, dim = c(k, k))
+  
+  # initiate Armijo-Goldstein parameters
   beta <- 1 / 2
   alpha0 <- 1
   alpha <- alpha0
-  k <- ncol(Sigma_t[[1]])
   
+  # get indices for the lower-triangular part of Sigma
   idx <- !upper.tri(Sigma_t[[1]])
   
   for (i in seq.int(2, 1 + n_iter)) {
     
     # compute gradient
-    curr_grad <- gradient_2d_fi0(Sigma_t[[i-1]], r, fi)
+    curr_grad <- gradient_2d_fi0(Sigma_t[[i-1]], cor_mat)
     
     # make Sigma into a vector
     Sigma_comp <- Sigma_t[[i-1]][idx]
@@ -56,12 +68,12 @@ r_descent_2d <- function(Sigma, r, fi, n_iter = 100, multistep = FALSE,
     if (inherits(update, "error")) {
       
       update <- curr_grad[idx]
-      cat("Hessian Singular\n")
+      message("Hessian Singular\n")
     }
     
-    curr_obj <- likelihood_2d_fi0(Sigma_t[[i-1]], r, fi) 
+    curr_obj <- likelihood_2d_fi0(Sigma_t[[i-1]], cor_mat) 
     Sigma_cand <- Sigma_pf(Sigma_t[[i-1]][idx], as.vector(alpha * update), k)
-    new_obj <- likelihood_2d_fi0(Sigma_cand, r, fi)
+    new_obj <- likelihood_2d_fi0(Sigma_cand, cor_mat)
     improve <- new_obj - curr_obj
     
     nabla2 <- vec_norm(curr_grad)^2
@@ -73,7 +85,7 @@ r_descent_2d <- function(Sigma, r, fi, n_iter = 100, multistep = FALSE,
       arm_cnt <- arm_cnt + 1
       alpha <- alpha * beta
       Sigma_cand <- Sigma_pf(Sigma_t[[i-1]][idx], as.vector(alpha * update), k)
-      new_obj <- likelihood_2d_fi0(Sigma_cand, r, fi)
+      new_obj <- likelihood_2d_fi0(Sigma_cand, cor_mat)
       improve <- new_obj - curr_obj
       if (verbose) cat(arm_cnt, "\n")
     }
@@ -86,7 +98,7 @@ r_descent_2d <- function(Sigma, r, fi, n_iter = 100, multistep = FALSE,
       
       Sigma_cand_h <- Sigma_pf(Sigma_t[[i-1]][idx], 
                                as.vector(alpha * beta * update), k)
-      new_obj_h <- likelihood_2d_fi0(Sigma_cand_h, r, fi)
+      new_obj_h <- likelihood_2d_fi0(Sigma_cand_h, cor_mat)
       improve_h <- new_obj_h - curr_obj
       
       if (improve_h > improve) {
@@ -109,7 +121,7 @@ r_descent_2d <- function(Sigma, r, fi, n_iter = 100, multistep = FALSE,
         
         d_bet <- FALSE
         Sigma_cand_d <- Sigma_pf(Sigma_t[[i-1]][idx], as.vector(alpha / beta * update), k)
-        new_obj_d <- likelihood_2d_fi0(Sigma_cand_d, r, fi)
+        new_obj_d <- likelihood_2d_fi0(Sigma_cand_d, cor_mat)
         improve_d <- new_obj_d - curr_obj
         
         if (improve_d > improve) {
@@ -123,7 +135,7 @@ r_descent_2d <- function(Sigma, r, fi, n_iter = 100, multistep = FALSE,
       }
     }
     
-    new_obj <- likelihood_2d_fi0(Sigma_cand, r, fi)
+    new_obj <- likelihood_2d_fi0(Sigma_cand, cor_mat)
     if (verbose) {
       
       cat("Likelihood at iteration", i, "=", new_obj, 
@@ -150,19 +162,7 @@ Sigma_pf <- function(Sigma_comp, update, k) {
   Sigma_pf
 }
 
-likelihood_2d_fi0 <- function(Sigma, z, fi = 0) {
-  
-  if (!is.null(attr(z, "cor_mat"))) {
-    
-    cor_mat <- z
-  } else {
-    
-    nsamp <- nrow(z)
-    cor_mat <- 1 / nsamp * t(z) %*% z
-    fi_mat <- array((1-fi)^2, dim = dim(cor_mat))
-    diag(fi_mat) <- 1-fi
-    cor_mat <- cor_mat / fi_mat
-  }
+likelihood_2d_fi0 <- function(Sigma, cor_mat) {
   
   pz <- cpp_scaling_2d(Sigma)
   sum(cor_mat * Sigma) - log(sum(pz))
@@ -175,11 +175,11 @@ compute_grad_logc_ij <- function(i, j, pz) {
   (1 + (i != j)) * 1 / sum(pz) * sum(pz[idx])
 }
 
-gradient_2d_fi0 <- function(Sigma, z, fi = 0) {
+gradient_2d_fi0 <- function(Sigma, cor_mat) {
   
   pz <- cpp_scaling_2d(Sigma)
   pz <- pz / sum(pz)
-  grad <- grad_ij_fi0(z, fi)
+  grad <- grad_ij_fi0(cor_mat)
   k <- ncol(Sigma)
   
   for (i in seq_len(k)) {
@@ -194,19 +194,7 @@ gradient_2d_fi0 <- function(Sigma, z, fi = 0) {
   grad
 }
 
-grad_ij_fi0 <- function(z, fi = 0) {
-  
-  if (!is.null(attr(z, "cor_mat"))) {
-    
-    cor_mat <- z
-  } else {
-    
-    nsamp <- nrow(z)
-    cor_mat <- 1 / nsamp * t(z) %*% z
-    fi_mat <- array((1-fi)^2, dim = dim(cor_mat))
-    diag(fi_mat) <- 1-fi
-    cor_mat <- cor_mat / fi_mat
-  }
+grad_ij_fi0 <- function(cor_mat) {
   
   grad <- 2 * cor_mat
   diag(grad) <- diag(grad) / 2

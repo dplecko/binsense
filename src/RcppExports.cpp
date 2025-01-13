@@ -10,28 +10,51 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
-// cpp_A_xy
-NumericMatrix cpp_A_xy(double fi_xy, int k);
-RcppExport SEXP _binsensate_cpp_A_xy(SEXP fi_xySEXP, SEXP kSEXP) {
+// cpp_A_xy_im
+NumericMatrix cpp_A_xy_im(NumericVector fi_xy, int k);
+RcppExport SEXP _binsensate_cpp_A_xy_im(SEXP fi_xySEXP, SEXP kSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type fi_xy(fi_xySEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type fi_xy(fi_xySEXP);
     Rcpp::traits::input_parameter< int >::type k(kSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_A_xy(fi_xy, k));
+    rcpp_result_gen = Rcpp::wrap(cpp_A_xy_im(fi_xy, k));
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_invert_A_xy
-NumericMatrix cpp_invert_A_xy(NumericMatrix A, NumericVector pz, NumericVector pr);
-RcppExport SEXP _binsensate_cpp_invert_A_xy(SEXP ASEXP, SEXP pzSEXP, SEXP prSEXP) {
+// cpp_Ainv_xy_im
+NumericMatrix cpp_Ainv_xy_im(NumericVector fi_xy, int k);
+RcppExport SEXP _binsensate_cpp_Ainv_xy_im(SEXP fi_xySEXP, SEXP kSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericMatrix >::type A(ASEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type pz(pzSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type pr(prSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_invert_A_xy(A, pz, pr));
+    Rcpp::traits::input_parameter< NumericVector >::type fi_xy(fi_xySEXP);
+    Rcpp::traits::input_parameter< int >::type k(kSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_Ainv_xy_im(fi_xy, k));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_A_xy_zinf
+NumericMatrix cpp_A_xy_zinf(NumericVector fi_xy, int k);
+RcppExport SEXP _binsensate_cpp_A_xy_zinf(SEXP fi_xySEXP, SEXP kSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type fi_xy(fi_xySEXP);
+    Rcpp::traits::input_parameter< int >::type k(kSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_A_xy_zinf(fi_xy, k));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_Ainv_xy_zinf
+NumericMatrix cpp_Ainv_xy_zinf(NumericVector fi_xy, int k);
+RcppExport SEXP _binsensate_cpp_Ainv_xy_zinf(SEXP fi_xySEXP, SEXP kSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type fi_xy(fi_xySEXP);
+    Rcpp::traits::input_parameter< int >::type k(kSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_Ainv_xy_zinf(fi_xy, k));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -64,35 +87,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_fi_hash
-NumericVector cpp_fi_hash(int x, double fi, int dim);
-RcppExport SEXP _binsensate_cpp_fi_hash(SEXP xSEXP, SEXP fiSEXP, SEXP dimSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< int >::type x(xSEXP);
-    Rcpp::traits::input_parameter< double >::type fi(fiSEXP);
-    Rcpp::traits::input_parameter< int >::type dim(dimSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_fi_hash(x, fi, dim));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_grad_ij
-NumericVector cpp_grad_ij(NumericVector rhash, int i, int j, int k, double fi, NumericVector pz);
-RcppExport SEXP _binsensate_cpp_grad_ij(SEXP rhashSEXP, SEXP iSEXP, SEXP jSEXP, SEXP kSEXP, SEXP fiSEXP, SEXP pzSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type rhash(rhashSEXP);
-    Rcpp::traits::input_parameter< int >::type i(iSEXP);
-    Rcpp::traits::input_parameter< int >::type j(jSEXP);
-    Rcpp::traits::input_parameter< int >::type k(kSEXP);
-    Rcpp::traits::input_parameter< double >::type fi(fiSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type pz(pzSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_grad_ij(rhash, i, j, k, fi, pz));
-    return rcpp_result_gen;
-END_RCPP
-}
 // cpp_scaling_2d
 NumericVector cpp_scaling_2d(NumericMatrix Sigma);
 RcppExport SEXP _binsensate_cpp_scaling_2d(SEXP SigmaSEXP) {
@@ -101,18 +95,6 @@ BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< NumericMatrix >::type Sigma(SigmaSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_scaling_2d(Sigma));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_hessian_2d_degenerate
-NumericMatrix cpp_hessian_2d_degenerate(NumericVector pz, int p);
-RcppExport SEXP _binsensate_cpp_hessian_2d_degenerate(SEXP pzSEXP, SEXP pSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type pz(pzSEXP);
-    Rcpp::traits::input_parameter< int >::type p(pSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_hessian_2d_degenerate(pz, p));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -126,18 +108,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< IntegerVector >::type idx(idxSEXP);
     Rcpp::traits::input_parameter< int >::type p(pSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_hessian_2d(pz, idx, p));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_mu
-NumericMatrix cpp_mu(NumericVector pz, int p);
-RcppExport SEXP _binsensate_cpp_mu(SEXP pzSEXP, SEXP pSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type pz(pzSEXP);
-    Rcpp::traits::input_parameter< int >::type p(pSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_mu(pz, p));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -164,33 +134,42 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_bit_fi_hash
-NumericVector cpp_bit_fi_hash(IntegerVector x, double fi);
-RcppExport SEXP _binsensate_cpp_bit_fi_hash(SEXP xSEXP, SEXP fiSEXP) {
+// cpp_bit_to_idx_mat
+NumericVector cpp_bit_to_idx_mat(NumericMatrix bit);
+RcppExport SEXP _binsensate_cpp_bit_to_idx_mat(SEXP bitSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< IntegerVector >::type x(xSEXP);
-    Rcpp::traits::input_parameter< double >::type fi(fiSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_bit_fi_hash(x, fi));
+    Rcpp::traits::input_parameter< NumericMatrix >::type bit(bitSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_bit_to_idx_mat(bit));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_bit_to_idx
+int cpp_bit_to_idx(NumericVector bit);
+RcppExport SEXP _binsensate_cpp_bit_to_idx(SEXP bitSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type bit(bitSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_bit_to_idx(bit));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_binsensate_cpp_A_xy", (DL_FUNC) &_binsensate_cpp_A_xy, 2},
-    {"_binsensate_cpp_invert_A_xy", (DL_FUNC) &_binsensate_cpp_invert_A_xy, 3},
+    {"_binsensate_cpp_A_xy_im", (DL_FUNC) &_binsensate_cpp_A_xy_im, 2},
+    {"_binsensate_cpp_Ainv_xy_im", (DL_FUNC) &_binsensate_cpp_Ainv_xy_im, 2},
+    {"_binsensate_cpp_A_xy_zinf", (DL_FUNC) &_binsensate_cpp_A_xy_zinf, 2},
+    {"_binsensate_cpp_Ainv_xy_zinf", (DL_FUNC) &_binsensate_cpp_Ainv_xy_zinf, 2},
     {"_binsensate_cpp_fi_grad", (DL_FUNC) &_binsensate_cpp_fi_grad, 5},
     {"_binsensate_cpp_idx", (DL_FUNC) &_binsensate_cpp_idx, 4},
-    {"_binsensate_cpp_fi_hash", (DL_FUNC) &_binsensate_cpp_fi_hash, 3},
-    {"_binsensate_cpp_grad_ij", (DL_FUNC) &_binsensate_cpp_grad_ij, 6},
     {"_binsensate_cpp_scaling_2d", (DL_FUNC) &_binsensate_cpp_scaling_2d, 1},
-    {"_binsensate_cpp_hessian_2d_degenerate", (DL_FUNC) &_binsensate_cpp_hessian_2d_degenerate, 2},
     {"_binsensate_cpp_hessian_2d", (DL_FUNC) &_binsensate_cpp_hessian_2d, 3},
-    {"_binsensate_cpp_mu", (DL_FUNC) &_binsensate_cpp_mu, 2},
     {"_binsensate_cpp_p_z", (DL_FUNC) &_binsensate_cpp_p_z, 1},
     {"_binsensate_cpp_idx_to_bit", (DL_FUNC) &_binsensate_cpp_idx_to_bit, 2},
-    {"_binsensate_cpp_bit_fi_hash", (DL_FUNC) &_binsensate_cpp_bit_fi_hash, 2},
+    {"_binsensate_cpp_bit_to_idx_mat", (DL_FUNC) &_binsensate_cpp_bit_to_idx_mat, 1},
+    {"_binsensate_cpp_bit_to_idx", (DL_FUNC) &_binsensate_cpp_bit_to_idx, 1},
     {NULL, NULL, 0}
 };
 

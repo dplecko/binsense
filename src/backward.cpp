@@ -2,7 +2,7 @@
 using namespace Rcpp;
 
 // [[Rcpp::export]]
-NumericMatrix cpp_A_xy(double fi_xy, int k) {
+NumericMatrix cpp_A_xy_im(NumericVector fi_xy, int k) {
   
   NumericMatrix Axy(1<<k, 1<<k);
   int i_bit, j_bit;
@@ -23,10 +23,9 @@ NumericMatrix cpp_A_xy(double fi_xy, int k) {
           continue;
         }
         
-        if (i_bit == 1) Axy(i, j) *= (1 - fi_xy);
-        if (j_bit - i_bit == 1) Axy(i, j) *= fi_xy;
+        if (i_bit == 1) Axy(i, j) *= (1 - fi_xy(b));
+        if (j_bit - i_bit == 1) Axy(i, j) *= fi_xy(b);
       }
-      
     }
   }
   
@@ -34,21 +33,67 @@ NumericMatrix cpp_A_xy(double fi_xy, int k) {
 }
 
 // [[Rcpp::export]]
-NumericMatrix cpp_invert_A_xy(NumericMatrix A, NumericVector pz, 
-                              NumericVector pr) {
+NumericMatrix cpp_Ainv_xy_im(NumericVector fi_xy, int k) {
   
-  NumericMatrix B(A.nrow(), A.ncol());
+  NumericMatrix Ainv_xy(1<<k, 1<<k);
+  int i_bit, j_bit;
   
-  for (int i = 0; i < B.nrow(); ++i) {
+  for (int i = 0; i < (1<<k); ++i) {
     
-    for (int j = 0; j < B.ncol(); ++j) {
+    for (int j = 0; j < (1<<k); ++j) {
       
-      B(i, j) = A(j, i) * pz(i) / pr(j);
+      Ainv_xy(i, j) = 1;
+      
+      for (int b = 0; b < k; ++b) {
+        
+        i_bit = (i & (1<<b)) > 0;
+        j_bit = (j & (1<<b)) > 0;
+        
+        if (i_bit > j_bit) {
+          Ainv_xy(i, j) = 0;
+          continue;
+        }
+        
+        if (j_bit - i_bit == 1) Ainv_xy(i, j) *= -fi_xy(b);
+        if (j_bit == 1) Ainv_xy(i, j) /= (1 - fi_xy(b));
+      }
     }
   }
   
-  return B;
+  return Ainv_xy;
 }
+
+
+// [[Rcpp::export]]
+NumericMatrix cpp_A_xy_zinf(NumericVector fi_xy, int k) {
+  
+  NumericMatrix Axy(1<<k, 1<<k);
+  fi_xy(0) = 0;
+  
+  for (int i = 0; i < (1<<k); ++i) {
+    
+    Axy(0, i) = fi_xy(i);
+    Axy(i, i) = 1-fi_xy(i);
+  }
+  
+  return Axy;
+}
+
+// [[Rcpp::export]]
+NumericMatrix cpp_Ainv_xy_zinf(NumericVector fi_xy, int k) {
+  
+  NumericMatrix Ainv_xy(1<<k, 1<<k);
+  fi_xy(0) = 0;
+  
+  for (int i = 0; i < (1<<k); ++i) {
+    
+    Ainv_xy(i, i) = 1 / (1-fi_xy(i));
+    if (i > 0) Ainv_xy(0, i) = -fi_xy(i) / (1 - fi_xy(i));
+  }
+  
+  return Ainv_xy;
+}
+
 
 // [[Rcpp::export]]
 NumericVector cpp_fi_grad(NumericMatrix Ainv, 

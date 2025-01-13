@@ -26,66 +26,6 @@ LogicalVector cpp_idx(int x, int a, int b, int dim) {
 }
 
 // [[Rcpp::export]]
-NumericVector cpp_fi_hash(int x, double fi, int dim) {
-  
-  NumericVector res(1<<dim);
-  bool skip;
-  x -= 1;
-  
-  for (int i = 0; i < 1<<dim; ++i) {
-    
-    skip = false;
-    for(int j = 0; j < dim; ++j) {
-      
-      if ( !(i & (1<<j)) && ((x & (1<<j)))) {
-        res(i) = 0;
-        skip = true;
-        break;
-      }
-    }
-    
-    if (!skip) {
-      res(i) = 1;
-      for(int j = 0; j < dim; ++j) {
-        if ( i & (1<<j) && !(x & (1<<j))) res(i) *= fi;
-        if ( x & (1<<j)) res(i) *= 1-fi;
-      }
-    }
-    
-  }
-  
-  return res;
-}
-
-// [[Rcpp::export]]
-NumericVector cpp_grad_ij(NumericVector rhash, int i, int j, int k, double fi,
-                          NumericVector pz) {
-  
-  LogicalVector idx(pz.length());
-  NumericVector fi_wgh_hash(pz.length());
-  NumericVector grad_ij(rhash.length());
-  
-  double idx_sum; double tot_sum;
-  
-  for (int x = 0; x < rhash.length(); ++x) {
-    
-    fi_wgh_hash = cpp_fi_hash(rhash(x), fi, k);
-    idx = cpp_idx(rhash(x), i, j, k);
-    
-    idx_sum = 0; tot_sum = 0;
-    for (int y = 0; y < idx.length(); ++y) {
-      
-      if (idx(y)) idx_sum += fi_wgh_hash(y) * pz(y);
-      tot_sum += fi_wgh_hash(y) * pz(y);
-    }
-    
-    if (tot_sum > 0) grad_ij(x) = idx_sum / tot_sum;
-  }
-  
-  return grad_ij;
-}
-
-// [[Rcpp::export]]
 NumericVector cpp_scaling_2d(NumericMatrix Sigma) {
   
   int k = Sigma.ncol(); int pz_dim = 1;
@@ -106,38 +46,6 @@ NumericVector cpp_scaling_2d(NumericMatrix Sigma) {
   }
   
   return pz;
-}
-
-// [[Rcpp::export]]
-NumericMatrix cpp_hessian_2d_degenerate(NumericVector pz, int p) {
-  
-  NumericMatrix hess(p * p, p * p);
-  double eij, ekl, eijkl;
-  int i, j, k, l;
-  
-  for (int x = 0; x < p*p; ++x) {
-    
-    for (int y = 0; y < p*p; ++y) {
-      
-      i = x / p;
-      j = x % p;
-      k = y / p;
-      l = y % p;
-
-      eij = 0, ekl = 0, eijkl = 0;
-      
-      for (int dim = 0; dim < pz.length(); ++dim) {
-        
-        eij += ((1<<i & dim) > 0) * ((1<<j & dim) > 0) * pz(dim);
-        ekl += ((1<<k & dim) > 0) * ((1<<l & dim) > 0) * pz(dim);
-        eijkl += ((1<<i & dim) > 0) * ((1<<j & dim) > 0) * ((1<<k & dim) > 0) * ((1<<l & dim) > 0) * pz(dim);
-      }
-      
-      hess(x, y) = eijkl - eij * ekl;
-    }
-  }
-  
-  return hess;
 }
 
 // [[Rcpp::export]]
@@ -170,25 +78,6 @@ NumericMatrix cpp_hessian_2d(NumericVector pz, IntegerVector idx, int p) {
   }
   
   return hess;
-}
-
-// [[Rcpp::export]]
-NumericMatrix cpp_mu(NumericVector pz, int p) {
-  
-  NumericMatrix mu(p, p);
-  
-  for (int i = 0; i < p; ++i) {
-    
-    for (int j = 0; j < p; ++j) {
-      
-      for (int dim = 0; dim < pz.length(); ++dim) {
-        
-        mu(i, j) += ((1<<i & dim) > 0) * ((1<<j & dim) > 0) * pz(dim);
-      }
-    }
-  }
-  
-  return mu;
 }
 
 // [[Rcpp::export]]
@@ -226,33 +115,33 @@ NumericVector cpp_idx_to_bit(IntegerVector idx, int dim) {
 }
 
 // [[Rcpp::export]]
-NumericVector cpp_bit_fi_hash(IntegerVector x, double fi) {
+NumericVector cpp_bit_to_idx_mat(NumericMatrix bit) {
   
-  int dim = x.length();
-  NumericVector res(1<<dim);
-  bool skip;
+  NumericVector idx(bit.nrow());
+  int dim = bit.ncol();
   
-  for (int i = 0; i < 1<<dim; ++i) {
+  for (int i = 0; i < bit.nrow(); ++i) {
     
-    skip = false;
-    for(int j = 0; j < dim; ++j) {
+    for (int ki = 0; ki < dim; ++ki) {
       
-      if ( !(i & (1<<j)) && x(j) ) {
-        res(i) = 0;
-        skip = true;
-        break;
-      }
+      idx(i) += bit(i, ki) * (1<<ki);
     }
-    
-    if (!skip) {
-      res(i) = 1;
-      for(int j = 0; j < dim; ++j) {
-        if ( i & (1<<j) && !x(j) ) res(i) *= fi;
-        if ( x(j) ) res(i) *= 1-fi;
-      }
-    }
-    
   }
   
-  return res;
+  return idx;
+}
+
+// [[Rcpp::export]]
+int cpp_bit_to_idx(NumericVector bit) {
+  
+  int idx;
+  int dim = bit.length();
+  idx = 0;
+  
+  for (int i = 0; i < bit.length(); ++i) {
+    
+    idx += bit(i) * (1<<i);
+  }
+  
+  return idx;
 }
