@@ -26,6 +26,7 @@ binsensate <- function(X, Y, R, fi, method = c("IM", "ZINF"), A = NULL,
                        solver = c("backward", "two-stage-em"), ...) {
   
   solver <- match.arg(solver, c("backward", "two-stage-em"))
+  method <- match.arg(method, c("IM", "ZINF"))
   
   if (!is.null(A)) {
     
@@ -40,6 +41,8 @@ binsensate <- function(X, Y, R, fi, method = c("IM", "ZINF"), A = NULL,
     A <- fi_to_A(fi, ncol(R), method)
   }
   
+  if (method == "ZINF") zinf_verify(X, Y, R, fi)
+  
   switch(
     solver,
     backward = backward_solver(X, Y, R, fi, method, A),
@@ -51,10 +54,12 @@ binsensate <- function(X, Y, R, fi, method = c("IM", "ZINF"), A = NULL,
 #' 
 #' @inheritParams binsensate
 #' @export
-backward_solver <- function(X, Y, R, fi, method, A) {
+backward_solver <- function(X, Y, R, fi, method, A, fi_change = FALSE) {
   
   k <- ncol(R)
   enc_mat <- t(replicate(nrow(R), 2^(seq_len(k) - 1L)))
+  fi_change <- attr(fi, "fi_change")
+  if (is.null(fi_change)) fi_change <- FALSE
   
   pr <- pz <- pxy <- list(list(0, 0), list(0, 0))
   
@@ -103,16 +108,31 @@ backward_solver <- function(X, Y, R, fi, method, A) {
           if (method == "IM") { 
             
             # trade for a well-posed inverse problem
-            fi_new <- trade_inv_prob(pz[[x + 1]][[y + 1]], 
-                                     pr[[x + 1]][[y + 1]], 
-                                     A_inv_xy, fi[[x + 1]][[y + 1]])
+            fi_new <- trade_inv_prob_IM(pz[[x + 1]][[y + 1]], 
+                                        pr[[x + 1]][[y + 1]], 
+                                        A_inv_xy, fi[[x + 1]][[y + 1]])
             
             # re-run with new fi
             fi_new <- fi_trade(fi, fi_new, x, y)
             Anew <- fi_to_A(fi_new, k, method)
+            attr(fi_new, "fi_change") <- TRUE
             return(
               backward_solver(X, Y, R, fi_new, method, Anew)
             )
+          } else if (method == "ZINF") {
+            
+            fi_new <- trade_inv_prob_ZINF(pz[[x + 1]][[y + 1]], 
+                                          pr[[x + 1]][[y + 1]], 
+                                          fi[[x + 1]][[y + 1]])
+            
+            # re-run with new fi
+            fi_new <- fi_trade(fi, fi_new, x, y)
+            Anew <- fi_to_A(fi_new, k, method)
+            attr(fi_new, "fi_change") <- TRUE
+            return(
+              backward_solver(X, Y, R, fi_new, method, Anew)
+            )
+            
           } else { # for other methods
             
             stop(
@@ -131,6 +151,9 @@ backward_solver <- function(X, Y, R, fi, method, A) {
       }
     }
   }
+  
+  if (fi_change) 
+    message("fi parameter was updated to be compatible with observed data.\n")
   
   # get the marginal P(z)
   pz_inf <- rep(0, 2^k)
@@ -157,7 +180,8 @@ backward_solver <- function(X, Y, R, fi, method, A) {
   ate <- sum((py_x1z - py_x0z) * pz_inf)
   
   return(
-    list(pz = pz_inf, ATE = ate, fi = fi, solver = "backward")
+    list(pz = pz_inf, ATE = ate, fi = fi, solver = "backward", 
+         fi_change = fi_change)
   )
 }
 
@@ -173,7 +197,7 @@ backward_solver <- function(X, Y, R, fi, method, A) {
 #' @importFrom stats glm runif
 #' @export
 two_stage_em <- function(X, Y, R, fi, method, A, mc_per_samp = 10, n_epoch = 10, 
-                         rand_init = FALSE) {
+                         rand_init = FALSE, se = FALSE, detect_viol = FALSE) {
   
   # Step (0) - infer Sigma
   lmb <- Sigma <- list()
@@ -222,6 +246,27 @@ two_stage_em <- function(X, Y, R, fi, method, A, mc_per_samp = 10, n_epoch = 10,
                      lambda_icept = runif(1, -1, 1), mu_icept = runif(1, -1, 1))
   }
   
+  if (k > 5 | method == "ZINF") { # possibly consider a chunking approach
+    
+    # re-order
+    enc <- 1 + rowSums(R * t(replicate(nrow(dat$R), 2^(seq_len(k) - 1))))
+    reord <- order(enc)
+    R <- R[reord, ]
+    X <- X[reord]
+    Y <- Y[reord]
+    enc <- enc[reord]
+    
+    chunks <- rle(enc)
+    enc_vals <- chunks$values
+    brks <- c(1, cumsum(chunks$lengths))
+    starts <- brks[-length(brks)]
+    stops <- brks[-1]
+    zero_idx <- which(enc == 1) # seq_len(stops[1])
+    nzero_idx <- setdiff(seq_len(length(X)), zero_idx)
+    
+    by_chunk <- if ((length(enc_vals) / length(X)) < 0.2) TRUE else FALSE
+  } else by_chunk <- FALSE
+  
   for (i in seq_len(n_epoch)) {
     
     # get px_z, py_z
@@ -229,47 +274,126 @@ two_stage_em <- function(X, Y, R, fi, method, A, mc_per_samp = 10, n_epoch = 10,
     logity_z <- cpp_p_z(lmb[[i]]$mu) + lmb[[i]]$mu_icept
     beta <- lmb[[i]]$beta
     
-    # sample mc_samples for each actual sample
-    mc_twist <- lapply(
-      seq_len(nrow(R)),
-      function(j) {
+    if (by_chunk | method == "ZINF") {
+      
+      # pb <- progress_bar$new(
+      #   format = "[:bar] :current/:total (:percent) elapsed: :elapsed",
+      #   total = length(enc_vals), clear = FALSE, width = 60
+      # )
+      
+      if (method == "ZINF") {
         
-        x <- X[j]
-        y <- Y[j]
-        r <- R[j, ]
+        mc_twist <- list()
+        r_idx <- 1
+        X_chunk <- X[zero_idx]
+        Y_chunk <- Y[zero_idx]
+        ret <- c()
+        for (x in c(0, 1)) for (y in c(0, 1)) {
+          
+          num_xy <- sum(X_chunk == x & Y_chunk == y)
+          if (num_xy == 0) next
+          # P(r | z, x, y) conditionals
+          pr_zxy <- A[[1 + x]][[1 + y]][r_idx, ]
+          
+          if (x == 1) px <- px_z else px <- 1 - px_z
+          
+          py_z <- expit(logity_z + beta * x)
+          if (y == 1) py <- py_z else py <- 1 - py_z
+          
+          probs <- pz * px * py * pr_zxy
+          probs <- probs / sum(probs)
+          
+          z_mc_idx <- sample(length(probs), size = num_xy * mc_per_samp, 
+                             prob = probs, replace = TRUE)
+          z_mc <- cpp_idx_to_bit(z_mc_idx - 1, k)
+          ret <- rbind(ret, cbind(X = x, Y = y, Z = z_mc))
+        }
         
-        r_idx <- 1 + sum(r * 2^(seq_len(k)-1))
+        mc_twist[[1]] <- ret
+        nzero_mc <- rep(nzero_idx, mc_per_samp)
+        mc_twist[[2]] <- cbind(X = X[nzero_mc], Y = Y[nzero_mc], Z = R[nzero_mc, ])
         
-        # P(r | z, x, y) conditionals
-        pr_zxy <- A[[1 + x]][[1 + y]][r_idx, ]
+      } else {
         
-        if (x == 1) px <- px_z else px <- 1 - px_z
-        
-        py_z <- expit(logity_z + beta * x)
-        if (y == 1) py <- py_z else py <- 1 - py_z
-        
-        probs <- pz * px * py * pr_zxy
-        probs <- probs / sum(probs)
-        
-        z_mc_idx <- sample(length(probs), size = mc_per_samp, prob = probs,
-                           replace = TRUE)
-        z_mc <- cpp_idx_to_bit(z_mc_idx - 1, length(r)) # returns a matrix
-        
-        cbind(X = x, Y = y, Z = z_mc)
+        mc_twist <- Map(
+          function(r_idx, start, stop) {
+            
+            X_chunk <- X[start:stop]
+            Y_chunk <- Y[start:stop]
+            ret <- c()
+            for (x in c(0, 1)) for (y in c(0, 1)) {
+              
+              num_xy <- sum(X_chunk == x & Y_chunk == y)
+              if (num_xy == 0) next
+              # P(r | z, x, y) conditionals
+              pr_zxy <- A[[1 + x]][[1 + y]][r_idx, ]
+              
+              if (x == 1) px <- px_z else px <- 1 - px_z
+              
+              py_z <- expit(logity_z + beta * x)
+              if (y == 1) py <- py_z else py <- 1 - py_z
+              
+              probs <- pz * px * py * pr_zxy
+              probs <- probs / sum(probs)
+              
+              z_mc_idx <- sample(length(probs), size = num_xy * mc_per_samp, 
+                                 prob = probs, replace = TRUE)
+              z_mc <- cpp_idx_to_bit(z_mc_idx - 1, k)
+              ret <- rbind(ret, cbind(X = x, Y = y, Z = z_mc))
+            }
+            
+            # pb$tick()
+            ret
+          },
+          enc_vals, starts, stops
+        )
       }
-    )
+    } else {
+      
+      # # sample mc_samples for each actual sample
+      # pb <- progress_bar$new(
+      #   format = "[:bar] :current/:total (:percent) elapsed: :elapsed",
+      #   total = length(X) / 100, clear = FALSE, width = 60
+      # )
+      
+      mc_twist <- lapply(
+        seq_len(nrow(R)),
+        function(j) {
+          
+          x <- X[j]
+          y <- Y[j]
+          r <- R[j, ]
+          
+          r_idx <- 1 + sum(r * 2^(seq_len(k)-1))
+          
+          # P(r | z, x, y) conditionals
+          pr_zxy <- A[[1 + x]][[1 + y]][r_idx, ]
+          
+          if (x == 1) px <- px_z else px <- 1 - px_z
+          
+          # if (j %% 100 == 0) pb$tick()
+          
+          py_z <- expit(logity_z + beta * x)
+          if (y == 1) py <- py_z else py <- 1 - py_z
+          
+          probs <- pz * px * py * pr_zxy
+          probs <- probs / sum(probs)
+          
+          z_mc_idx <- sample(length(probs), size = mc_per_samp, prob = probs,
+                             replace = TRUE)
+          z_mc <- cpp_idx_to_bit(z_mc_idx - 1, length(r)) # returns a matrix
+          
+          cbind(X = x, Y = y, Z = z_mc)
+        }
+      )
+    }
+    # cat("Monte-Carlo twist finished for epoch", i, "/", n_epoch,"\n")
     mc_twist <- as.data.frame(do.call(rbind, mc_twist))
     
     # re-fit for Sigma
-    if (!(method == "IM")) {
-      
-      Z_mc <- as.matrix(mc_twist[, -c(1, 2)])
-      cor_mat <- t(Z_mc) %*% Z_mc / nrow(Z_mc)
-      Sigma[[i+1]] <- tail(cormat_to_Sigma(cor_mat), n = 1L)[[1]]
-    } else { # in the case of independent missingess, do not need to update Sigma
-      
-      Sigma[[i+1]] <- Sigma[[i]]
-    }
+    Z_mc <- as.matrix(mc_twist[, -c(1, 2)])
+    cor_mat <- t(Z_mc) %*% Z_mc / nrow(Z_mc)
+    Sigma[[i+1]] <- tail(cormat_to_Sigma(cor_mat), n = 1L)[[1]]
     
     pz <- cpp_scaling_2d(Sigma[[i+1]])
     pz <- pz / sum(pz)
@@ -279,24 +403,161 @@ two_stage_em <- function(X, Y, R, fi, method, A, mc_per_samp = 10, n_epoch = 10,
     
     # early stopping criterion
     scale <- 1
-    if (
-      vec_norm(lmb[[i+1]]$lambda - lmb[[i]]$lambda)^2 < 
+    converged <- vec_norm(lmb[[i+1]]$lambda - lmb[[i]]$lambda)^2 < 
       scale * ncol(R) / nrow(R) &
       vec_norm(lmb[[i+1]]$mu - lmb[[i]]$mu)^2 < scale * ncol(R) / nrow(R) &
       lmb[[i+1]]$beta - lmb[[i]]$beta < scale / nrow(R)
-    ) break
+    if (converged) break
   }
   
-  px_z <- expit(cpp_p_z(lmb[[i+1]]$lambda) + lmb[[i+1]]$lambda_icept)
-  logity_z <- cpp_p_z(lmb[[i+1]]$mu) + lmb[[i+1]]$mu_icept
-  beta <- lmb[[i+1]]$beta
+  # Louis' method for Standard Errors (SEs)
+  if (se) {
+    
+    # get the latest Monte Carlo sample
+    Z_mc <- as.matrix(mc_twist[, -c(1, 2)])
+    X_mc <- mc_twist[, 1]
+    Y_mc <- mc_twist[, 2]
+    
+    Sigma_idx <- which(!upper.tri(Sigma[[i+1]]))
+    
+    # # Sigma Hessian
+    # h_sigma <- cpp_hess_sigma(pz, Sigma_idx - 1, k)
+    # 
+    # # Lambda Hessian
+    # px_z <- expit(
+    #   cbind(1, cpp_idx_to_bit(seq_len(2^k)-1, k)) %*% 
+    #     c(lmb[[i+1]]$lambda_icept, lmb[[i+1]]$lambda)
+    # )
+    # h_lambda <- cpp_hess_lambda(pz, px_z, k)
+    # 
+    # # Mu Hessian
+    # py_x1z <- expit(
+    #   cbind(1, cpp_idx_to_bit(seq_len(2^k)-1, k), 1) %*% 
+    #     c(lmb[[i+1]]$mu_icept, lmb[[i+1]]$mu, lmb[[i+1]]$beta)
+    # )
+    # py_x0z <- expit(
+    #   cbind(1, cpp_idx_to_bit(seq_len(2^k)-1, k), 0) %*% 
+    #     c(lmb[[i+1]]$mu_icept, lmb[[i+1]]$mu, lmb[[i+1]]$beta)
+    # )
+    # h_mu <- cpp_hess_mu(pz, px_z, py_x0z, py_x1z, k)
+    # 
+    # hess_mat <- Matrix::bdiag(h_sigma, h_lambda, h_mu)
+    # 
+    # # Sigma score function S_c
+    # Sigma_se <- tail(cormat_to_Sigma(t(Z_mc) %*% Z_mc / nrow(Z_mc)), n = 1L)[[1]]
+    # 
+    # cor_mat <- t(Z_mc) %*% Z_mc / nrow(Z_mc)
+    # cumulant_adj <- gradient_2d_fi0(Sigma_se, # Sigma[[i+1]], 
+    #                                 cor_mat = matrix(0, ncol = ncol(Sigma[[i+1]]),
+    #                                                  nrow = nrow(Sigma[[i+1]])))
+    # cumulant_adj <- cumulant_adj[Sigma_idx]
+    # Sigma_term <- do.call(rbind, lapply(
+    #   seq_len(nrow(Z_mc)),
+    #   function(i) {
+    #     
+    #     unit_cor <- 2 * (Z_mc[i, ] %*% t(Z_mc[i, ]))
+    #     diag(unit_cor) <- diag(unit_cor) / 2
+    #     unit_cor[Sigma_idx] + cumulant_adj
+    #   }
+    # ))
+    # 
+    # # Lambda score function S_c
+    # logit_x_mc <- as.vector(Z_mc %*% lmb[[i+1]]$lambda + lmb[[i+1]]$lambda_icept)
+    # px_z_mc <- expit(logit_x_mc)
+    # 
+    # # Mu score function S_c
+    # logit_y_mc <- as.vector(Z_mc %*% lmb[[i+1]]$mu + lmb[[i+1]]$mu_icept +
+    #                           lmb[[i+1]]$beta * X_mc)
+    # py_xz_mc <- expit(logit_y_mc)
+    # 
+    # Ztilde <- cbind(1, Z_mc)
+    # Vtilde <- cbind(1, X_mc, Z_mc)
+    # 
+    # S_c <- cbind(Sigma_term, Ztilde * (X_mc - px_z_mc), Vtilde * (Y_mc - py_xz_mc))
+    # fisher_mat <- hess_mat - t(S_c) %*% S_c / nrow(S_c)
+    # 
+    # louis_se <- sqrt(solve(fisher_mat)[length(fisher_mat)] / length(X))
+    
+    # compute via Exponential families
+    tX <- do.call(rbind, lapply(
+      seq_len(nrow(Z_mc)),
+      function(i) {
+        
+        unit_cor <- 2 * (Z_mc[i, ] %*% t(Z_mc[i, ]))
+        diag(unit_cor) <- diag(unit_cor) / 2
+        c(unit_cor[Sigma_idx], X_mc[i], Z_mc[i, ] * X_mc[i], Y_mc[i],
+          Z_mc[i, ] * Y_mc[i], Y_mc[i] * X_mc[i])
+      }
+    ))
+    
+    covtX <- t(tX) %*% tX / nrow(tX) - colMeans(tX) %*% t(colMeans(tX))
+    
+    covtX_y <- array(0, dim = dim(covtX))
+    for (i in seq_len(length(X))) {
+      
+      mc_idx <- seq.int((i-1) * mc_per_samp + 1, i * mc_per_samp)
+      
+      # Monte Carlo sample
+      tXi <- t(tX[mc_idx, ])
+      tXi_c <- tXi - rowMeans(tXi)
+      
+      covtX_y <- covtX_y + tXi_c %*% t(tXi_c) / mc_per_samp
+    }
+    
+    covtX_y <- covtX_y / length(X)
+    se_mat <- tryCatch(
+      solve(covtX - covtX_y),
+      error = function(e) e
+    )
+    if (inherits(se_mat, "error")) {
+      
+      message(paste(
+        "Observed Fisher information matrix nearly singular.",
+        "Louis' method cannot be used."
+      ))
+      louis_se <- NA
+    } else {
+      
+      louis_se <- sqrt(se_mat[length(covtX - covtX_y)] / length(X))
+      if (louis_se < 0) louis_se <- NA
+    }
+  } else louis_se <- NULL
+  
+  # detecting incompatibility of fi with the observed data
+  if (detect_viol) {
+    
+    if (incompat_detect(X, Y, R, fi, A, lmb, Sigma)) {
+      message("Missingness pattern may be incompatible with the observed data.\n")
+      fi_change <- TRUE 
+    } else fi_change <- FALSE
+  } else fi_change <- FALSE
+  
+  # ATE computation
+  tl <- length(lmb)
+  px_z <- expit(cpp_p_z(lmb[[tl]]$lambda) + lmb[[tl]]$lambda_icept)
+  logity_z <- cpp_p_z(lmb[[tl]]$mu) + lmb[[tl]]$mu_icept
+  beta <- lmb[[tl]]$beta
+  ATE_hat <- sum( (expit(logity_z + beta) - expit(logity_z)) * pz)
+  if (!is.null(louis_se)) {
+    
+    ATE_lwr <- sum( 
+      (expit(logity_z + (beta - 1.96 * louis_se)) - expit(logity_z)) * pz
+    )
+    ATE_upr <- sum( 
+      (expit(logity_z + (beta + 1.96 * louis_se)) - expit(logity_z)) * pz
+    )
+  } else ATE_lwr <- ATE_upr <- NULL
   
   list(
     pz = pz,
-    ATE = sum( (expit(logity_z + beta) - expit(logity_z)) * pz),
+    ATE = ATE_hat,
+    ATE_lwr = ATE_lwr,
+    ATE_upr = ATE_upr,
     solver = "two-stage-ecm",
+    fi_change = fi_change,
     Sigma = Sigma,
     beta = beta,
+    beta_se = louis_se,
     theta = lmb
   )
 }

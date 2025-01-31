@@ -58,7 +58,7 @@ cormat_to_Sigma <- function(cor_mat, n_iter = 100, multistep = FALSE, verbose = 
     
     # compute the Hessian matrix
     pz <- cpp_scaling_2d(Sigma_t[[i-1]])
-    Hess <- cpp_hessian_2d(pz / sum(pz), which(idx) - 1, ncol(Sigma_t[[i-1]]))
+    Hess <- cpp_hess_sigma(pz / sum(pz), which(idx) - 1, ncol(Sigma_t[[i-1]]))
     
     update <- tryCatch(
       solve(Hess, curr_grad[idx]),

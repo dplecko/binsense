@@ -44,7 +44,56 @@ infer_pz <- function(z, pr, phi, k, weights = FALSE) {
   sum(r_wgh * pr[r_idx])
 }
 
-trade_inv_prob <- function(pz, pr, Ainv, fi) {
+trade_inv_prob_ZINF <- function(pz, pr, fi) {
+  
+  while(TRUE) {
+    
+    pz_neg_init <- pz[1]
+    
+    # compute the gradient for the zero-inflated (ZINF) setting
+    fi_grad <- cpp_fi_grad_ZINF(pr, fi)
+    
+    # fix any undesirable gradient values
+    fi_grad[fi_grad > 0] <- 0 # don't allow increases in fi
+    fi_grad[fi == 0] <- 0 # vanishing gradient for fi equal to zero
+    
+    # apply Armijo-Goldstein to ensure step size not too large
+    alpha <- min(min(fi / abs(fi_grad), na.rm = TRUE), 1)
+    gain <- -Inf
+    c <- 1/2
+    message("Init alpha =", alpha, ";")
+    while( gain < c * alpha * sum(fi_grad^2) ) {
+      
+      alpha <- alpha / 2
+      fi_cand <- fi + alpha * fi_grad 
+      
+      # compute P(z) for the fi_cand
+      
+      pz_new <- cpp_Ainv_xy_zinf(fi_cand, k) %*% pr
+      gain <- pz_new[1] - pz_neg_init
+      
+      if (alpha < 10^(-10)) break
+      if (gain > 0 & (gain < 1/5 * abs(sum(pz_neg_init)) | gain < 10^(-3))) break
+    }
+    
+    # update the fi that was selected
+    fi <- fi + alpha * fi_grad
+    fi[fi < 0.001] <- 0
+    
+    # update the pz
+    pz <- cpp_Ainv_xy_zinf(fi, k) %*% pr
+    
+    # message about progress
+    message("Sum of negatives", sum(pz[pz < 0]), "\n")
+    
+    # check if the stopping criterion is achieved
+    if(abs(sum(pz[pz < 0])) < 10^(-5)) break
+  }
+  
+  fi
+}
+
+trade_inv_prob_IM <- function(pz, pr, Ainv, fi) {
   
   k <- length(fi)
   while(TRUE) {
@@ -54,14 +103,13 @@ trade_inv_prob <- function(pz, pr, Ainv, fi) {
     
     pz_neg_init <- pz[neg_idx]
     
-    fi_grad <- cpp_fi_grad(Ainv, neg_idx, pr, fi)
+    fi_grad <- cpp_fi_grad_IM(Ainv, neg_idx, pr, fi)
     
     # expecting all fi_grad to have negative direction (!)
     fi_grad[fi_grad > 0] <- 0 # don't allow increases in fi
     fi_grad[fi == 0] <- 0 # vanishing gradient for fi equal to zero
     
     # apply Armijo-Goldstein to ensure step size not too large
-    
     alpha <- min(min(fi / abs(fi_grad), na.rm = TRUE), 1)
     gain <- -Inf
     c <- 1/2

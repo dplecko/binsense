@@ -1,6 +1,8 @@
 
-rng_to_df <- function(pattern, fi_seq) {
+rng_to_df <- function(pattern, fi_seq, fi_seq2 = NULL) {
   
+  if (is.null(fi_seq2)) fi_seq2 <- fi_seq
+   
   pattern <- match.arg(pattern, c("agn", "x", "y"))
   if (pattern == "agn") {
     
@@ -8,14 +10,14 @@ rng_to_df <- function(pattern, fi_seq) {
     df$fi_x0y0 <- df$fi_x1y0 <- df$fi_x0y1 <- df$fi_x1y1 <- fi_seq
   } else if (pattern == "x") {
     
-    fi_grid <- expand.grid(a = fi_seq, b = fi_seq)
+    fi_grid <- expand.grid(a = fi_seq, b = fi_seq2)
     
     df <- data.frame(pattern = rep(pattern, nrow(fi_grid)))
     df$fi_x0y0 <- df$fi_x0y1 <- fi_grid$a
     df$fi_x1y0 <- df$fi_x1y1 <- fi_grid$b
   } else if (pattern == "y") {
     
-    fi_grid <- expand.grid(a = fi_seq, b = fi_seq)
+    fi_grid <- expand.grid(a = fi_seq, b = fi_seq2)
     
     df <- data.frame(pattern = rep(pattern, nrow(fi_grid)))
     df$fi_x0y0 <- df$fi_x1y0 <- fi_grid$a
@@ -28,13 +30,13 @@ rng_to_df <- function(pattern, fi_seq) {
 search_space <- function(pattern = c("agn", "x", "y"),
                          type = c("range", "bound"),
                          method = c("IM", "ZINF"),
-                         fi, k) {
+                         fi, fi2 = NULL, k) {
   
   pattern <- match.arg(pattern, c("agn", "x", "y"))
   type <- match.arg(type, c("range", "bound"))
   method <- match.arg(method, c("IM", "ZINF"))
   
-  params <- rng_to_df(pattern, fi_seq = fi)
+  params <- rng_to_df(pattern, fi_seq = fi, fi_seq2 = fi2)
   params$ATE <- NA
   
   if (method == "ZINF") k <- 2^k
@@ -42,7 +44,7 @@ search_space <- function(pattern = c("agn", "x", "y"),
   if (type == "bound") {
     
     opt_params <- lapply(
-      1:nrow(params),
+      seq_len(nrow(params)),
       function(i) {
         
         fi <- list(
@@ -59,104 +61,187 @@ search_space <- function(pattern = c("agn", "x", "y"),
   )
 }
 
-infer_search <- function(dat, spc, solver, nbreaks = 5) {
+ate_to_or <- function(ate, mu_mod, R) {
   
-  pattern <- spc$pattern
-  if (spc$type == "bound") {
+  logits <- predict(mu_mod, data.frame(X = 0, R = R))
+  
+  a <- -0.5
+  b <- 0.5
+  while (b - a > 0.0005) {
     
-    for (i in seq_len(nrow(spc$params))) {
+    beta <- (b+a) / 2
+    ate_b <- mean(expit(logits + beta) - expit(logits))
+    
+    if (ate_b > ate) b <- beta else a <- beta
+  }
+  
+  (b + a) / 2
+}
+
+bounded_optim <- function(pattern, opt_params, params, dat, method, solver) {
+  
+  flag <- TRUE
+  while (flag) {
+    
+    flag <- FALSE
+    for (x in c(0, 1)) {
       
-      flag <- TRUE
-      while (flag) {
+      if ((pattern == "agn" || pattern == "y") & x == 1) next
+      for (y in c(0, 1)) {
         
-        flag <- FALSE
-        for (x in c(0, 1)) {
+        if ((pattern == "agn" || pattern == "x") & y == 1) next
+        for (j in seq_along(opt_params[[1+x]][[1+y]])) {
           
-          if ((pattern == "agn" || pattern == "y") & x == 1) next
-          for (y in c(0, 1)) {
+          # get the current pattern
+          fi_curr <- opt_params
+          
+          # get the (x, y) subpattern and its j-th value
+          fij_curr <- fi_curr[[1+x]][[1+y]][j]
+          
+          # define the search range and number of breakpoints
+          fi_range <- seq(0, params[[paste0("fi_x", x, "y", y)]], 
+                          length.out = nbreaks)
+          
+          if (length(fi_range) == 0) next
+          
+          # prepare for search
+          fij_opt <- NA
+          f_opt <- -Inf
+          for (l in seq_len(nbreaks)) {
             
-            if ((pattern == "agn" || pattern == "x") & y == 1) next
-            for (j in seq_along(spc$opt_params[[i]][[1+x]][[1+y]])) {
+            cand_fij <- fi_range[l]
+            
+            # evaluate the candidate
+            fi_test <- fi_curr
+            if (pattern == "agn") {
               
-              # get the current pattern
-              fi_curr <- spc$opt_params[[i]]
+              for (xp in c(0, 1)) for (yp in c(0, 1))
+                fi_test[[1+xp]][[1+yp]][j] <- cand_fij
+            } else if (pattern == "x") {
               
-              # get the (x, y) subpattern and its j-th value
-              fij_curr <- fi_curr[[1+x]][[1+y]][j]
+              for (yp in c(0, 1))
+                fi_test[[1+x]][[1+yp]][j] <- cand_fij
+            } else if (pattern == "y") {
               
-              # define the search range and number of breakpoints
-              fi_range <- seq(0, spc$params[i,][[paste0("fi_x", x, "y", y)]], 
-                              length.out = nbreaks)
-              
-              if (length(fi_range) == 0) next
-              
-              # prepare for search
-              fij_opt <- NA
-              f_opt <- -Inf
-              for (l in seq_len(nbreaks)) {
-                
-                cand_fij <- fi_range[l]
-                
-                # evaluate the candidate
-                fi_test <- fi_curr
-                if (pattern == "agn") {
-                  
-                  for (xp in c(0, 1)) for (yp in c(0, 1))
-                    fi_test[[1+xp]][[1+yp]][j] <- cand_fij
-                } else if (pattern == "x") {
-                  
-                  for (yp in c(0, 1))
-                    fi_test[[1+x]][[1+yp]][j] <- cand_fij
-                } else if (pattern == "y") {
-                  
-                  for (xp in c(0, 1))
-                    fi_test[[1+xp]][[1+y]][j] <- cand_fij
-                }
-                
-                f_tst <- binsensate(dat$X, dat$Y, dat$R, fi = fi_test, 
-                                    method = spc$method, solver = solver)$ATE
-                
-                if (f_tst > f_opt) {
-                  
-                  
-                  f_opt <- f_tst
-                  fij_opt <- cand_fij
-                  spc$opt_params[[i]] <- fi_test
-                }
-              }
-              
-              # if an update is found, renew the flag
-              if (fij_opt != fij_curr) {
-                
-                flag <- TRUE
-                cat("Found a pattern improvement.",
-                    "fi_old =", fij_curr, "vs.", "fi_new =", fij_opt, "\n")
-              }
+              for (xp in c(0, 1))
+                fi_test[[1+xp]][[1+y]][j] <- cand_fij
             }
+            
+            f_tst <- binsensate(dat$X, dat$Y, dat$R, fi = fi_test, 
+                                method = spc$method, solver = solver)$ATE
+            
+            if (f_tst > f_opt) {
+              
+              
+              f_opt <- f_tst
+              fij_opt <- cand_fij
+              opt_params <- fi_test
+            }
+          }
+          
+          # if an update is found, renew the flag
+          if (fij_opt != fij_curr) {
+            
+            flag <- TRUE
+            cat("Found a pattern improvement.",
+                "fi_old =", fij_curr, "vs.", "fi_new =", fij_opt, "\n")
           }
         }
       }
     }
   }
   
-  for (i in seq_len(nrow(spc$params))) {
+  opt_params
+} 
+
+spc_optim <- function(type, opt_params, params, dat, method, solver, gt) {
+  
+  if (type == "bound") {
     
-    if (spc$type == "bound") {
-      
-      fi <- spc$opt_params[[i]]
-    } else {
-      
-      fi <- list(
-        list(spc$params[i,]$fi_x0y0, spc$params[i,]$fi_x0y1),
-        list(spc$params[i,]$fi_x1y0, spc$params[i,]$fi_x1y1)
-      )
-    }
+    fi <- opt_params
+  } else {
     
-    res <- binsensate(dat$X, dat$Y, dat$R, fi = fi, method = spc$method,
-                      solver = solver)
-    spc$params$ATE[i] <- res$ATE
+    fi <- list(
+      list(params$fi_x0y0, params$fi_x0y1),
+      list(params$fi_x1y0, params$fi_x1y1)
+    )
   }
   
+  if (gt) {
+    
+    assert_that(!is.na(params$ATE[1]))
+    dati <- synth_data_mid(
+      n = nrow(dat$R), k = nrow(Sigma0),
+      fi = fi,
+      class = "expfam-2d",
+      Sigma = Sigma0, lam = lambda[-1], mu = mu[-1],
+      icept_x = lambda[1], icept_y = mu[1],
+      beta = ate_to_or(params$ATE[1], mu_mod, dat$R)
+    )
+  } else dati <- dat
+  
+  res <- binsensate(dati$X, dati$Y, dati$R, fi = fi, method = method,
+                    solver = solver, se = TRUE)
+  
+  if (gt) {
+    
+    params$ATE_gt[1] <- res$ATE
+    params$fi_change[1] <- res$fi_change 
+    if (!is.null(res$ATE_lwr)) {
+      
+      params$ATE_gt_lwr[1] <- res$ATE_lwr
+      params$ATE_gt_upr[1] <- res$ATE_upr
+    }
+  } else {
+    
+    params$ATE[1] <- res$ATE
+    params$fi_change[1] <- res$fi_change
+    if (!is.null(res$ATE_lwr)) {
+      
+      params$ATE_lwr[1] <- res$ATE_lwr
+      params$ATE_upr[1] <- res$ATE_upr
+    }
+  }
+  
+  params
+}
+
+infer_search <- function(dat, spc, solver, gt = FALSE, nbreaks = 5) {
+  
+  pattern <- spc$pattern
+  if (spc$type == "bound") {
+    
+    spc$opt_params <- parallel::mclapply(
+      seq_len(nrow(spc$params)),
+      function(i) bounded_optim(pattern, spc$opt_params[[i]], spc$params[i,],
+                                dat, spc$method, solver),
+      mc.cores = n_cores()
+    )
+  }
+  
+  # if replicating with known ground truth, fit models
+  if (gt) {
+    
+    Sigma0 <- binsensate:::infer_Sigma_IM(dat$X, dat$Y, dat$R, 
+                                          fi = list(list(0, 0), list(0, 0)))
+    lambda <- glm(X ~ ., data = data.frame(X = dat$X, R = dat$R), 
+                  family = "binomial")$coef
+    mu_mod <- glm(Y ~ ., data = data.frame(Y = dat$Y, X = dat$X, R = dat$R), 
+                  family = "binomial")
+    mu <- mu_mod$coef[-2]
+    spc$params$ATE_gt <- NA
+  }
+  
+  params <- mclapply(
+    seq_len(nrow(spc$params)),
+    function(i) {
+      spc_optim(type, spc$opt_params[[i]], spc$params[i,],
+                dat, spc$method, solver, gt)
+    },
+    mc.cores = n_cores()
+  )
+  
+  spc$params <- do.call(rbind, params)
   spc
 }
 

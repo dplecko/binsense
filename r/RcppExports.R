@@ -5,8 +5,16 @@ cpp_A_xy_im <- function(fi_xy, k) {
     .Call('_binsensate_cpp_A_xy_im', PACKAGE = 'binsensate', fi_xy, k)
 }
 
+cpp_A_xy_im_sparse <- function(fi_xy, k) {
+    .Call('_binsensate_cpp_A_xy_im_sparse', PACKAGE = 'binsensate', fi_xy, k)
+}
+
 cpp_Ainv_xy_im <- function(fi_xy, k) {
     .Call('_binsensate_cpp_Ainv_xy_im', PACKAGE = 'binsensate', fi_xy, k)
+}
+
+cpp_A_xy_zinf_sparse <- function(fi_xy, k) {
+    .Call('_binsensate_cpp_A_xy_zinf_sparse', PACKAGE = 'binsensate', fi_xy, k)
 }
 
 cpp_A_xy_zinf <- function(fi_xy, k) {
@@ -17,8 +25,20 @@ cpp_Ainv_xy_zinf <- function(fi_xy, k) {
     .Call('_binsensate_cpp_Ainv_xy_zinf', PACKAGE = 'binsensate', fi_xy, k)
 }
 
-cpp_fi_grad <- function(Ainv, neg_idx, pr, fi, verbose = 0L) {
-    .Call('_binsensate_cpp_fi_grad', PACKAGE = 'binsensate', Ainv, neg_idx, pr, fi, verbose)
+cpp_fi_grad_ZINF <- function(fi, pr) {
+    .Call('_binsensate_cpp_fi_grad_ZINF', PACKAGE = 'binsensate', fi, pr)
+}
+
+cpp_fi_grad_IM <- function(Ainv, neg_idx, pr, fi, verbose = 0L) {
+    .Call('_binsensate_cpp_fi_grad_IM', PACKAGE = 'binsensate', Ainv, neg_idx, pr, fi, verbose)
+}
+
+cpp_hess_lambda <- function(pz, px_z, p) {
+    .Call('_binsensate_cpp_hess_lambda', PACKAGE = 'binsensate', pz, px_z, p)
+}
+
+cpp_hess_mu <- function(pz, px_z, py_x0z, py_x1z, p) {
+    .Call('_binsensate_cpp_hess_mu', PACKAGE = 'binsensate', pz, px_z, py_x0z, py_x1z, p)
 }
 
 cpp_idx <- function(x, a, b, dim) {
@@ -29,8 +49,8 @@ cpp_scaling_2d <- function(Sigma) {
     .Call('_binsensate_cpp_scaling_2d', PACKAGE = 'binsensate', Sigma)
 }
 
-cpp_hessian_2d <- function(pz, idx, p) {
-    .Call('_binsensate_cpp_hessian_2d', PACKAGE = 'binsensate', pz, idx, p)
+cpp_hess_sigma <- function(pz, idx, p) {
+    .Call('_binsensate_cpp_hess_sigma', PACKAGE = 'binsensate', pz, idx, p)
 }
 
 cpp_p_z <- function(lambda) {

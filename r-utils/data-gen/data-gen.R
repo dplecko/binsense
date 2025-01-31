@@ -155,13 +155,28 @@ real_data <- function(src = c("miiv", "mimic_demo"), n = Inf, k = Inf) {
     load(fl_pth)
   }
   
-  data <- replace_na(data, val = FALSE, vars = "death")
-  data[, c(index_var(data)) := NULL]
-  data[, Obesity := NULL]
+  data <- data[is.na(death), death := FALSE]
+  data[, c(meta_vars(data), "elix_wide", "age") := NULL]
   data <- data[complete.cases(data)]
   
-  cmb_sel <- c("FluidsLytes", "Mets", "Liver", "Coagulopathy", "Arrhythmia", 
-               "NeuroOther", "Paralysis", "Lymphoma", "CHF", "PVD", "Pulmonary")
+  # remove Obesity and Weight Loss as they are closely related to BMI
+  data[, c("Obesity", "WeightLoss") := NULL]
+  
+  # combine DM and DMcx
+  data[, DM := pmax(DM, DMcx)]
+  data[, DMcx := NULL]
+  
+  # regress
+  logreg <- glm(death ~ . - bmi_all + (bmi_all >= 25), data = data, 
+                family = "binomial")
+  lr_coef <- summary(logreg)$coefficients
+  lr_coef <- lr_coef[order(lr_coef[, 1], decreasing = TRUE), ]
+  sel1 <- lr_coef[, 1] > 0 & lr_coef[, 4] < 0.05
+  sel2 <- lr_coef[, 1] > 0
+  cmb_sel1 <- rownames(lr_coef)[sel1]
+  cmb_sel2 <- rownames(lr_coef)[sel2]
+  
+  cmb_sel <- cmb_sel1
   
   k <- min(k, length(cmb_sel))
   n <- min(n, nrow(data))
@@ -172,7 +187,3 @@ real_data <- function(src = c("miiv", "mimic_demo"), n = Inf, k = Inf) {
   
   list(R = R, X = X, Y = Y)
 }
-
-
-
-

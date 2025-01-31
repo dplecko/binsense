@@ -1,10 +1,19 @@
 
 fi_to_A_xy <- function(fi, k, method) {
   
-  switch (method,
-    IM = cpp_A_xy_im(fi, k),
-    ZINF = cpp_A_xy_zinf(fi, k)
-  )
+  if (k < 10) {
+    
+    switch (method,
+            IM = cpp_A_xy_im(fi, k),
+            ZINF = cpp_A_xy_zinf(fi, k)
+    )
+  } else { # use sparse matrices for large k
+    
+    switch (method,
+            IM = cpp_A_xy_im_sparse(fi, k),
+            ZINF = cpp_A_xy_zinf_sparse(fi, k)
+    )
+  }
 }
 
 fi_to_Ainv_xy <- function(fi, k, method) {

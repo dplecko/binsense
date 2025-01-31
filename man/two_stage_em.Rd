@@ -14,7 +14,9 @@ two_stage_em(
   A,
   mc_per_samp = 10,
   n_epoch = 10,
-  rand_init = FALSE
+  rand_init = FALSE,
+  se = FALSE,
+  detect_viol = FALSE
 )
 }
 \arguments{

@@ -1,5 +1,8 @@
 #include <Rcpp.h>
+#include <RcppEigen.h>
 using namespace Rcpp;
+using Eigen::SparseMatrix;
+using Eigen::Triplet;
 
 // [[Rcpp::export]]
 NumericMatrix cpp_A_xy_im(NumericVector fi_xy, int k) {
@@ -28,6 +31,43 @@ NumericMatrix cpp_A_xy_im(NumericVector fi_xy, int k) {
       }
     }
   }
+  
+  return Axy;
+}
+
+// [[Rcpp::depends(RcppEigen)]]
+// [[Rcpp::export]]
+Eigen::SparseMatrix<double> cpp_A_xy_im_sparse(NumericVector fi_xy, int k) {
+  int n = 1 << k;  // Size of the matrix (2^k x 2^k)
+  
+  std::vector<Eigen::Triplet<double>> triplets;  // To store non-zero entries
+  int i_bit, j_bit;
+  
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < n; ++j) {
+      double value = 1.0;
+      
+      for (int b = 0; b < k; ++b) {
+        i_bit = (i & (1 << b)) > 0;
+        j_bit = (j & (1 << b)) > 0;
+        
+        if (i_bit > j_bit) {
+          value = 0;
+          break;
+        }
+        
+        if (i_bit == 1) value *= (1 - fi_xy(b));
+        if (j_bit - i_bit == 1) value *= fi_xy(b);
+      }
+      
+      if (value != 0) {
+        triplets.emplace_back(i, j, value);  // Add non-zero entry
+      }
+    }
+  }
+  
+  Eigen::SparseMatrix<double> Axy(n, n);
+  Axy.setFromTriplets(triplets.begin(), triplets.end());
   
   return Axy;
 }
@@ -63,6 +103,24 @@ NumericMatrix cpp_Ainv_xy_im(NumericVector fi_xy, int k) {
   return Ainv_xy;
 }
 
+// [[Rcpp::depends(RcppEigen)]]
+// [[Rcpp::export]]
+Eigen::SparseMatrix<double> cpp_A_xy_zinf_sparse(NumericVector fi_xy, int k) {
+  int n = 1 << k;  // Size of the matrix (2^k x 2^k)
+  std::vector<Eigen::Triplet<double>> triplets;  // To store non-zero entries
+  
+  fi_xy(0) = 0;
+  
+  for (int i = 0; i < n; ++i) {
+    triplets.emplace_back(0, i, fi_xy(i));   // Axy(0, i) = fi_xy(i)
+    triplets.emplace_back(i, i, 1 - fi_xy(i)); // Axy(i, i) = 1 - fi_xy(i)
+  }
+  
+  Eigen::SparseMatrix<double> Axy(n, n);
+  Axy.setFromTriplets(triplets.begin(), triplets.end());
+  
+  return Axy;
+}
 
 // [[Rcpp::export]]
 NumericMatrix cpp_A_xy_zinf(NumericVector fi_xy, int k) {
@@ -94,12 +152,31 @@ NumericMatrix cpp_Ainv_xy_zinf(NumericVector fi_xy, int k) {
   return Ainv_xy;
 }
 
+// [[Rcpp::export]]
+NumericVector cpp_fi_grad_ZINF(NumericVector fi, NumericVector pr) {
+  
+  int k = fi.length();
+  NumericVector fi_grad(k);
+  
+  for (int i = 0; i < k; ++i) {
+    
+    if (i == 0) {
+      
+      fi_grad(i) = 0;
+    } else {
+      
+      fi_grad(i) = -pr(i) / ((1 - fi(i)) * (1 - fi(i)));
+    }
+  }
+  
+  return fi_grad;
+}
 
 // [[Rcpp::export]]
-NumericVector cpp_fi_grad(NumericMatrix Ainv, 
-                          NumericVector neg_idx, NumericVector pr, 
-                          NumericVector fi,
-                          int verbose = 0) {
+NumericVector cpp_fi_grad_IM(NumericMatrix Ainv, 
+                             NumericVector neg_idx, NumericVector pr, 
+                             NumericVector fi,
+                             int verbose = 0) {
   
   int k = fi.length();
   NumericVector fi_grad(k);
@@ -130,7 +207,7 @@ NumericVector cpp_fi_grad(NumericMatrix Ainv,
         
         if (i_bit) {
           
-          der_ij = Ainv(i, j) / (1-fi(ki)); // it was a mistake here!!
+          der_ij = Ainv(i, j) / (1-fi(ki));
           
           der_ij_new = 1;
           

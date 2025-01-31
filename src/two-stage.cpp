@@ -4,6 +4,7 @@ using namespace Rcpp;
 // [[Rcpp::export]]
 LogicalVector cpp_idx(int x, int a, int b, int dim) {
   
+  // a is the first index of Z, b is the second index
   LogicalVector res(1<<dim);
   bool skip;
   x -= 1;
@@ -13,13 +14,14 @@ LogicalVector cpp_idx(int x, int a, int b, int dim) {
     skip = false;
     for(int j = 0; j < dim; ++j) {
       
+      // if current Z = i value has a missing bit that Z = x has, skip
       if ( !(i & (1<<j)) && ((x & (1<<j))))  skip=true;
     }
     
     if (!skip) {
+      // check if Z = i has Z_a = 1 and Z_b = 1
       res(i) = (i & 1<<(a-1)) && (i & 1<<(b-1));
     }
-    
   }
   
   return res;
@@ -49,7 +51,7 @@ NumericVector cpp_scaling_2d(NumericMatrix Sigma) {
 }
 
 // [[Rcpp::export]]
-NumericMatrix cpp_hessian_2d(NumericVector pz, IntegerVector idx, int p) {
+NumericMatrix cpp_hess_sigma(NumericVector pz, IntegerVector idx, int p) {
   
   NumericMatrix hess(idx.length(), idx.length());
   double eij, ekl, eijkl;
@@ -77,6 +79,7 @@ NumericMatrix cpp_hessian_2d(NumericVector pz, IntegerVector idx, int p) {
     }
   }
   
+  // returns the Hessian of cumulant H(A) = -H(L), negative Hessian of log-like
   return hess;
 }
 
@@ -118,11 +121,10 @@ NumericVector cpp_idx_to_bit(IntegerVector idx, int dim) {
 NumericVector cpp_bit_to_idx_mat(NumericMatrix bit) {
   
   NumericVector idx(bit.nrow());
-  int dim = bit.ncol();
   
   for (int i = 0; i < bit.nrow(); ++i) {
     
-    for (int ki = 0; ki < dim; ++ki) {
+    for (int ki = 0; ki < bit.ncol(); ++ki) {
       
       idx(i) += bit(i, ki) * (1<<ki);
     }
@@ -135,7 +137,6 @@ NumericVector cpp_bit_to_idx_mat(NumericMatrix bit) {
 int cpp_bit_to_idx(NumericVector bit) {
   
   int idx;
-  int dim = bit.length();
   idx = 0;
   
   for (int i = 0; i < bit.length(); ++i) {

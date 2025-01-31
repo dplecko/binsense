@@ -4,7 +4,7 @@
 \alias{backward_solver}
 \title{Non-Parametric Binary Sensitivity Analysis}
 \usage{
-backward_solver(X, Y, R, fi, method, A)
+backward_solver(X, Y, R, fi, method, A, fi_change = FALSE)
 }
 \arguments{
 \item{X}{The treatment variable (vector with 0/1 entries).}

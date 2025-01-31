@@ -7,10 +7,10 @@ Sys.setenv("RICU_CONFIG_PATH" = file.path(root, "config"))
 Sys.setenv("RICU_SRC_LOAD" = 
              "mimic,miiv,aumc,hirid,eicu,eicu_demo,mimic_demo,anzics")
 
-if (!all(vapply(pkgs, requireNamespace, logical(1L)))) {
-  stop("Packages {pkgs} are required in order to proceed.")
-  if (!interactive()) q("no", status = 1, runLast = FALSE)
-}
+# if (!all(vapply(pkgs, requireNamespace, logical(1L)))) {
+#   stop("Packages {pkgs} are required in order to proceed.")
+#   if (!interactive()) q("no", status = 1, runLast = FALSE)
+# }
 
 library(readr)
 library(ranger)
@@ -33,5 +33,3 @@ library(doParallel)
 library(future)
 library(future.apply)
 
-ncpus <- detectCores()
-registerDoParallel(cores = ncpus)
