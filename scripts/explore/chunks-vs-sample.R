@@ -27,7 +27,7 @@ for (n in n_seq) {
     for (seed in seq_len(nseed)) {
       
       set.seed(seed)
-      nparams <- if (method == "IM") k else 2^k
+      nparams <- if (method == "IF") k else 2^k
       fi <- list(
         list(runif(nparams, min = 0, max = 1/3), runif(nparams, min = 0, max = 1/3)), 
         list(runif(nparams, min = 0, max = 1/3), runif(nparams, min = 0, max = 1/3))
@@ -44,10 +44,10 @@ for (n in n_seq) {
       
       # get the Louis standard error
       beta_new <- binsensate(X = dat$X, Y = dat$Y, R = dat$R, fi = fi, 
-                             solver = "two-stage-em", method = method,
+                             solver = "em", method = method,
                              new = TRUE)$beta
       beta_old <- binsensate(X = dat$X, Y = dat$Y, R = dat$R, fi = fi, 
-                             solver = "two-stage-em", method = method, 
+                             solver = "em", method = method, 
                              new = FALSE)$beta
       
       ret <- rbind(ret, data.frame(n = n, k = k, seed = seed,

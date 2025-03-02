@@ -15,9 +15,9 @@ test_that("ill posedness helpers", {
   
   suppressMessages(
     expect_message(
-      binsensate(dat$X, dat$Y, dat$R, fi = 0.3, method = "IM", 
+      binsensate(dat$X, dat$Y, dat$R, fi = 0.3, method = "IF", 
                  A = NULL, solver = "backward"),
-      regexp = "Init alpha"
+      regexp = "fi parameter was updated"
     )
   )
 })

@@ -9,9 +9,9 @@ binsensate(
   Y,
   R,
   fi,
-  method = c("IM", "ZINF"),
+  method = c("IF", "ZINF"),
   A = NULL,
-  solver = c("backward", "two-stage-em"),
+  solver = c("backward", "em"),
   ...
 )
 }
@@ -28,16 +28,18 @@ of which are lists. The entry \code{fi[[1+x]][[1+y]]} contains the sensitivity
 parameter corresponding to the probability that a confounder is unobserved for
 the specific value of X = x, Y = y.}
 
+\item{method}{Character taking values \code{"IF"} for independent fidelity, or
+\code{"ZINF"} for the zero-inflation fidelity pattern.}
+
 \item{A}{Sensitivity parameters that  List with two entries, both
 of which are lists. The entry \code{A[[1+x]][[1+y]]} contains the entries of the
 fidelity matrix A_xy for X = x, Y = y. Default to NULL (in which case) \code{fi} is
 used to infer the value of A_xy.}
 
 \item{solver}{Character scalar describing the solution method,
-either \code{"backward"} (non-parametric approach)
-or \code{"two-stage-em"} (parametric EM).}
+either \code{"backward"} (non-parametric approach) or \code{"em"} (parametric EM).}
 
-\item{...}{Further arguments passed to subroutine \code{\link{two_stage_em}}.}
+\item{...}{Further arguments passed to subroutine \code{\link{em_solver}}.}
 }
 \description{
 Binary Sensitivity Analysis

@@ -18,6 +18,13 @@ srcwrap <- function(src) {
   )
 }
 
+symmetric_trim <- function(x, eps) {
+  
+  x[x > eps] <- eps
+  x[x < -eps] <- -eps
+  x
+}
+
 n_cores <- function() {
   as.integer(
     Sys.getenv("LSB_DJOB_NUMPROC", unset = parallel::detectCores() / 2L)

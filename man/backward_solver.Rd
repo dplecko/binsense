@@ -4,7 +4,7 @@
 \alias{backward_solver}
 \title{Non-Parametric Binary Sensitivity Analysis}
 \usage{
-backward_solver(X, Y, R, fi, method, A, fi_change = FALSE)
+backward_solver(X, Y, R, fi, method, A)
 }
 \arguments{
 \item{X}{The treatment variable (vector with 0/1 entries).}
@@ -18,6 +18,9 @@ entries).}
 of which are lists. The entry \code{fi[[1+x]][[1+y]]} contains the sensitivity
 parameter corresponding to the probability that a confounder is unobserved for
 the specific value of X = x, Y = y.}
+
+\item{method}{Character taking values \code{"IF"} for independent fidelity, or
+\code{"ZINF"} for the zero-inflation fidelity pattern.}
 
 \item{A}{Sensitivity parameters that  List with two entries, both
 of which are lists. The entry \code{A[[1+x]][[1+y]]} contains the entries of the

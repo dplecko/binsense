@@ -20,7 +20,7 @@ init <- list()
 
 for (i in 1:50) {
   
-  res <- binsensate(X, Y, R, fi = fixy, solver = "two-stage-em", n_epoch = 10,
+  res <- binsensate(X, Y, R, fi = fixy, solver = "em", n_epoch = 10,
                     rand_init = TRUE)
   
   init[[i]] <- list(

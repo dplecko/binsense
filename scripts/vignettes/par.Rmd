@@ -37,23 +37,23 @@ fi_grid <- rbind(
   rng_to_df("y", fi_seq, fi_seq)
 )
 
-fi_grid <- grid_search(fi_grid, "two-stage-em")
-grid_multi_plt(fi_grid, "two-stage-em")
+fi_grid <- grid_search(fi_grid, "em")
+grid_multi_plt(fi_grid, "em")
 ```
 
 ```{r x-grid-save, echo=FALSE}
 # obtain the three plots (agnostic, x, y)
 
-p_agn <- grid_to_plt(fi_grid[fi_grid$type == "agnostic", ], "two-stage-em",
+p_agn <- grid_to_plt(fi_grid[fi_grid$type == "agnostic", ], "em",
                      "agnostic")
 ggsave(file.path(root, "paper", "figures", "par-agnostic.png"),
        p_agn, width = 6, height = 4)
 
-p_x <- grid_to_plt(fi_grid[fi_grid$type == "x", ], "two-stage-em", "x")
+p_x <- grid_to_plt(fi_grid[fi_grid$type == "x", ], "em", "x")
 ggsave(file.path(root, "paper", "figures", "par-x.png"), 
        p_x, width = 6, height = 4)
 
-p_y <- grid_to_plt(fi_grid[fi_grid$type == "y", ], "two-stage-em", "y")
+p_y <- grid_to_plt(fi_grid[fi_grid$type == "y", ], "em", "y")
 ggsave(file.path(root, "paper", "figures", "par-y.png"), 
        p_y, width = 6, height = 4)
 ```
@@ -66,7 +66,7 @@ We next run the sensitivity analysis along this direction over multiple bootstra
 ```{r, axis-search-ci, fig.align='center', , fig.cap="Estimation of the ATE based on the two-stage EM approach, x-specific in the direction of increasing missingness for X = 0."}
 fi_seq <- subset(fi_grid, type == "x" & fi_x1y1 == 0)$fi_x0y1
 
-axs_dat <- axis_search(X, Y, R, fi_seq, type = "x", solver = "two-stage-em",
+axs_dat <- axis_search(X, Y, R, fi_seq, type = "x", solver = "em",
                        nboot = nboot)[["df"]]
 
 ggplot(axs_dat, aes(x = fi, y = mid)) +
@@ -96,7 +96,7 @@ In the sequel, we investigate the performance of our inference method along this
 
 ```{r infer-Sigma}
 # infer the Sigma assuming \Phi = (0, 0, 0, 0)
-Sigma_mim0 <- binsensate:::infer_Sigma_IM(
+Sigma_mim0 <- binsensate:::infer_Sigma_IF(
   X, Y, R, fi = list(list(0, 0), list(0, 0))
 )
 ```
@@ -155,7 +155,7 @@ for (i in seq_along(fi_seq)) {
   Rsim[[i]] <- dat_sim$R
 }
 
-plot_dat <- axis_search(Xsim, Ysim, Rsim, fi_seq, "x", "two-stage-em",
+plot_dat <- axis_search(Xsim, Ysim, Rsim, fi_seq, "x", "em",
                         nboot = nboot)[["df"]]
 ```
 

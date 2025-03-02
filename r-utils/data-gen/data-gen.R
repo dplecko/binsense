@@ -1,16 +1,16 @@
 
-synth_data_mid <- function(n = 10^4, k = 5, seed = 22, 
+synth_data_mid <- function(n = 10^4, k = 5, seed = 2025, 
                            fi = list(list(0.3, 0.3), list(0.3, 0.3)),
-                           method = c("IM", "ZINF"),
+                           method = c("IF", "ZINF"),
                            A = NULL,
                            class = c("latent_u", "expfam-1d", "expfam-2d",
                                      "expfam-2d*"),
                            Sigma = NULL,
                            lam = NULL, mu = NULL, 
                            icept_x = NULL, icept_y = NULL,
-                           beta = NULL) {
+                           beta = NULL, ate = NULL) {
   
-  method <- match.arg(method, c("IM", "ZINF"))
+  method <- match.arg(method, c("IF", "ZINF"))
   class <- match.arg(class, c("latent_u", "expfam-1d", "expfam-2d", 
                               "expfam-2d*"))
   assertthat::assert_that(class %in% c("latent_u", "expfam-1d", "expfam-2d", 
@@ -70,7 +70,7 @@ synth_data_mid <- function(n = 10^4, k = 5, seed = 22,
   R <- Z
   pz_xy <- pr_xy <- lxy <- list(list(NULL, NULL), list(NULL, NULL))
   
-  if (!is.null(A) & method != "IM") { # code for generalized missingness
+  if (!is.null(A) & method != "IF") { # code for generalized missingness
     
     for (x in c(T, F)) {
       
@@ -140,7 +140,8 @@ synth_data_mid <- function(n = 10^4, k = 5, seed = 22,
   )
 }
 
-real_data <- function(src = c("miiv", "mimic_demo"), n = Inf, k = Inf) {
+real_data <- function(src = c("miiv", "mimic_demo"), n = Inf, k = Inf,
+                      trim_ends = TRUE) {
   
   src <- match.arg(src, c("miiv", "mimic_demo"))
   fl_pth <- file.path(root, "data", paste0(src, "_real_data.rda"))
@@ -166,6 +167,9 @@ real_data <- function(src = c("miiv", "mimic_demo"), n = Inf, k = Inf) {
   data[, DM := pmax(DM, DMcx)]
   data[, DMcx := NULL]
   
+  # remove extremes (underweight < 18.5, class II/III obese > 35)
+  if (trim_ends) data <- data[bmi_all >= 18.5 & bmi_all < 35]
+  
   # regress
   logreg <- glm(death ~ . - bmi_all + (bmi_all >= 25), data = data, 
                 family = "binomial")
@@ -182,7 +186,7 @@ real_data <- function(src = c("miiv", "mimic_demo"), n = Inf, k = Inf) {
   n <- min(n, nrow(data))
   
   R <- as.matrix(data[1:n, cmb_sel[1:k], with=FALSE])
-  X <- as.integer(data[1:n]$bmi_all > 25)
+  X <- as.integer(data[1:n]$bmi_all >= 25)
   Y <- as.integer(data[1:n]$death)
   
   list(R = R, X = X, Y = Y)

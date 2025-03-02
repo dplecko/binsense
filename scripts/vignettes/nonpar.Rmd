@@ -119,7 +119,7 @@ We now investigate the performance of our inference method applied to data from 
 
 ```{r infer-Sigma}
 # infer the Sigma assuming \Phi = (0, 0, 0, 0)
-Sigma_mim0 <- binsensate:::infer_Sigma_IM(
+Sigma_mim0 <- binsensate:::infer_Sigma_IF(
   X, Y, R, fi = list(list(0, 0), list(0, 0))
 )
 ```

@@ -5,7 +5,7 @@ using Eigen::SparseMatrix;
 using Eigen::Triplet;
 
 // [[Rcpp::export]]
-NumericMatrix cpp_A_xy_im(NumericVector fi_xy, int k) {
+NumericMatrix cpp_A_xy_if(NumericVector fi_xy, int k) {
   
   NumericMatrix Axy(1<<k, 1<<k);
   int i_bit, j_bit;
@@ -37,7 +37,7 @@ NumericMatrix cpp_A_xy_im(NumericVector fi_xy, int k) {
 
 // [[Rcpp::depends(RcppEigen)]]
 // [[Rcpp::export]]
-Eigen::SparseMatrix<double> cpp_A_xy_im_sparse(NumericVector fi_xy, int k) {
+Eigen::SparseMatrix<double> cpp_A_xy_if_sparse(NumericVector fi_xy, int k) {
   int n = 1 << k;  // Size of the matrix (2^k x 2^k)
   
   std::vector<Eigen::Triplet<double>> triplets;  // To store non-zero entries
@@ -73,7 +73,7 @@ Eigen::SparseMatrix<double> cpp_A_xy_im_sparse(NumericVector fi_xy, int k) {
 }
 
 // [[Rcpp::export]]
-NumericMatrix cpp_Ainv_xy_im(NumericVector fi_xy, int k) {
+NumericMatrix cpp_Ainv_xy_if(NumericVector fi_xy, int k) {
   
   NumericMatrix Ainv_xy(1<<k, 1<<k);
   int i_bit, j_bit;
@@ -173,10 +173,9 @@ NumericVector cpp_fi_grad_ZINF(NumericVector fi, NumericVector pr) {
 }
 
 // [[Rcpp::export]]
-NumericVector cpp_fi_grad_IM(NumericMatrix Ainv, 
+NumericVector cpp_fi_grad_IF(NumericMatrix Ainv, 
                              NumericVector neg_idx, NumericVector pr, 
-                             NumericVector fi,
-                             int verbose = 0) {
+                             NumericVector fi) {
   
   int k = fi.length();
   NumericVector fi_grad(k);

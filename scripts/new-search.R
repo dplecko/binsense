@@ -6,17 +6,15 @@ invisible(lapply(list.files(r_dir, full.names = TRUE, recursive = TRUE),
 
 slvr <- "backward"
 type <- "range"
-n <- 121119
-k <- if (slvr == "two-stage-em") 5 else 5
+n <- Inf
+k <- if (slvr == "em") 14 else 5
+set.seed(2025)
 
 # load data
 dat <- real_data(n = n, k = k)
 
-binsensate(dat$X, dat$Y, dat$R, fi = 0.25, method = "ZINF",
-           solver = "two-stage-em", detect_viol = FALSE)
-
-plts <- list()
-for (method in c("IM", "ZINF")) {
+plts <- spc_lst <- list()
+for (method in c("IF", "ZINF")) {
   
   for (pattern in c("agn", "x", "y")) {
     
@@ -30,20 +28,59 @@ for (method in c("IM", "ZINF")) {
       
       # perform the search
       spc <- infer_search(dat, spc, solver = solver)
+      spc_lst[[length(spc_lst) + 1]] <- spc
       plts[[length(plts) + 1]] <- spc_plot(spc)
     }
   }
 }
 
-cowplot::plot_grid(plotlist = plts, ncol = 3L)
+# walk along a specific direction
+spc_dir_if <- search_space(pattern = "x", method = "IF", 
+                           fi = seq(0, 0.1, 0.025), fi2 = 0,
+                           type = "range", k = k)
 
-# walk along a specific direction, and check the ground truth
-spc_dir <- search_space(pattern = "x", method = "IM", 
-                    fi = seq(0, 0.2, 0.05), fi2 = 0,
-                    type = "range", k = 5)
+spc_dir_if <- infer_search(dat, spc_dir_if, solver = slvr, se = TRUE,
+                           detect_viol = FALSE)
 
-spc_dir <- infer_search(dat, spc_dir, solver = slvr)
-spc_plot(spc_dir)
+spc_dir_zinf <- search_space(pattern = "x", method = "ZINF", 
+                             fi = seq(0, 0.2, 0.05), fi2 = 0,
+                             type = "range", k = k)
 
-spc_dir <- infer_search(dat, spc_dir, solver = slvr, gt = TRUE)
-spc_plot(spc_dir)
+spc_dir_zinf <- infer_search(dat, spc_dir_zinf, solver = slvr, se = TRUE,
+                             detect_viol = FALSE)
+
+# check correctness with a known ground truth
+spc_dir_if_gt <- infer_search(dat, spc_dir_if, solver = slvr, gt = TRUE, 
+                              se = TRUE)
+
+spc_dir_zinf_gt <- infer_search(dat, spc_dir_zinf, solver = slvr, gt = TRUE, 
+                                 se = TRUE)
+
+binsensate:::zinf_max_fi(dat$X, dat$Y, dat$R)
+
+# save the data for plotting
+save(spc_lst, spc_dir_if, spc_dir_zinf, spc_dir_if_gt, spc_dir_zinf_gt, plts,
+     file = file.path("results", paste0(slvr, "-search.RData")))
+
+# load(file.path("results", paste0(slvr, "-search.RData")))
+
+# produce the plots
+plts[[1]] <- spc_plot(spc_lst[[1]], spc_lst[[4]])
+plts[[4]] <- NULL
+plts[[6]] <- spc_plot(spc_dir_if)
+cowplot::plot_grid(plotlist = plts, ncol = 3L, 
+                   labels = paste0("(", letters[seq_along(plts)], ")"))
+ggsave(file.path(root, "results", paste0(slvr, ".png")), width = 16, height = 7)
+
+# ground-truth plots
+ggsave(
+  file.path(root, "results", paste0(slvr, "-xdir-if-gt.png")), 
+  plot = spc_plot(spc_dir_if_gt),
+  width = 6, height = 4
+)
+
+ggsave(
+  file.path(root, "results", paste0(slvr, "-xdir-zinf-gt.png")), 
+  plot = spc_plot(spc_dir_zinf_gt),
+  width = 6, height = 4
+)

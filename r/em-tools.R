@@ -1,6 +1,6 @@
 
 #' @importFrom utils tail
-infer_Sigma_IM <- function(X, Y, R, fi) {
+infer_Sigma_IF<- function(X, Y, R, fi) {
   
   cor_mat <- XYR_to_cormat(X, Y, R, fi)
   tail(cormat_to_Sigma(cor_mat), n = 1)[[1]]
@@ -31,7 +31,7 @@ XYR_to_cormat <- function(X, Y, R, fi) {
   mu_hat
 }
 
-cormat_to_Sigma <- function(cor_mat, n_iter = 100, multistep = FALSE, verbose = FALSE) {
+cormat_to_Sigma <- function(cor_mat, n_iter = 100, multistep = FALSE) {
   
   # get dimension k based on the cor_mat
   k <- ncol(cor_mat)
@@ -87,7 +87,6 @@ cormat_to_Sigma <- function(cor_mat, n_iter = 100, multistep = FALSE, verbose = 
       Sigma_cand <- Sigma_pf(Sigma_t[[i-1]][idx], as.vector(alpha * update), k)
       new_obj <- likelihood_2d_fi0(Sigma_cand, cor_mat)
       improve <- new_obj - curr_obj
-      if (verbose) cat(arm_cnt, "\n")
     }
     
     halved <- FALSE
@@ -136,11 +135,6 @@ cormat_to_Sigma <- function(cor_mat, n_iter = 100, multistep = FALSE, verbose = 
     }
     
     new_obj <- likelihood_2d_fi0(Sigma_cand, cor_mat)
-    if (verbose) {
-      
-      cat("Likelihood at iteration", i, "=", new_obj, 
-          "\n")
-    }
     improve <- new_obj - curr_obj
     Sigma_t[[i]] <- Sigma_cand
     if (improve < 10^(-10)) break

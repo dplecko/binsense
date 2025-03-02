@@ -7,7 +7,7 @@ likelihood_v <- function(X, Y, R, fi, A, lmb, Sigma) {
   if (k > 5) { # possibly consider a chunking approach
     
     # re-order
-    enc <- 1 + rowSums(R * t(replicate(nrow(dat$R), 2^(seq_len(k) - 1))))
+    enc <- 1 + rowSums(R * t(replicate(nrow(R), 2^(seq_len(k) - 1))))
     reord <- order(enc)
     R <- R[reord, ]
     X <- X[reord]
@@ -16,9 +16,9 @@ likelihood_v <- function(X, Y, R, fi, A, lmb, Sigma) {
     
     chunks <- rle(enc)
     enc_vals <- chunks$values
-    brks <- c(1, cumsum(chunks$lengths))
-    starts <- brks[-length(brks)]
-    stops <- brks[-1]
+    starts <- c(1, 1 + cumsum(chunks$lengths))
+    starts <- starts[-length(starts)]
+    stops <- cumsum(chunks$lengths)
     zero_idx <- which(enc == 1) # seq_len(stops[1])
     nzero_idx <- setdiff(seq_len(length(X)), zero_idx)
     
@@ -90,31 +90,6 @@ likelihood_v <- function(X, Y, R, fi, A, lmb, Sigma) {
   sum(like_i)
 }
 
-cross_entropy <- function(p, y) -mean(log(p) * y + log(1-p) * (1-y))
-
-cv_xgboost <- function(df, y, ret = "preds") {
-  
-  dtrain <- xgboost::xgb.DMatrix(data = as.matrix(df), label = y)
-  params <- list(
-    objective = "binary:logistic",
-    eval_metric = "logloss"
-  )
-  
-  cv <- xgboost::xgb.cv(
-    params = params,
-    data = dtrain,
-    nrounds = 1000,
-    nfold = 5,
-    early_stopping_rounds = 10,
-    prediction = TRUE,
-    verbose = FALSE
-  )
-  
-  if (ret == "nrounds") return(cv$best_iteration)
-  
-  return(cv$pred)
-}
-
 incompat_detect_like <- function(X, Y, R, fi, A, lmb, Sigma) {
   
   like0 <- likelihood_v(X, Y, R, fi, A, lmb, Sigma)
@@ -122,10 +97,9 @@ incompat_detect_like <- function(X, Y, R, fi, A, lmb, Sigma) {
   nrep <- 100
   for (i in seq_len(nrep)) {
     
-    # adversary based
-    dat_geni <- synth_data_mid(
+    dat_geni <- param_mod_gen(
       n = nrow(R), k = nrow(Sigma),
-      A = A, class = "expfam-2d", seed = i,
+      seed = i, A = A, 
       Sigma = Sigma, lam = lmb$lambda, mu = lmb$mu,
       icept_x = lmb$lambda_icept, icept_y = lmb$mu_icept,
       beta = lmb$beta
@@ -138,39 +112,6 @@ incompat_detect_like <- function(X, Y, R, fi, A, lmb, Sigma) {
   return(TRUE)
 }
 
-incompat_detect_class <- function(X, Y, R, fi, A, lmb, Sigma) {
-  
-  # adversary based
-  dat_gen <- synth_data_mid(
-    n = nrow(R), k = nrow(Sigma),
-    A = A, class = "expfam-2d",
-    Sigma = Sigma, lam = lmb$lambda, mu = lmb$mu,
-    icept_x = lmb$lambda_icept, icept_y = lmb$mu_icept,
-    beta = lmb$beta
-  )
-  
-  dt_tru <- cbind(X = X, Y = Y, R = R)
-  dt_gen <- cbind(X = dat_gen$X, Y = dat_gen$Y, R = dat_gen$R)
-  
-  dt <- rbind(dt_tru, dt_gen)
-  labs <- rep(c(1, 0), each = nrow(R))
-  
-  preds <- cv_xgboost(dt, y = labs)
-  loss0 <- cross_entropy(preds, labs)
-  
-  nreps <- 100
-  loss_perm <- c()
-  for (i in seq_len(nreps)) {
-    
-    labs_perm <- sample(labs, length(labs))
-    preds_perm <- cv_xgboost(dt, y = labs_perm)
-    loss_perm <- c(loss_perm, cross_entropy(preds_perm, labs_perm))
-  }
-  
-  # compute the p-value based on permutation testing
-  mean( loss_perm < loss0 )
-}
-
 incompat_detect <- function(X, Y, R, fi, A, lmb, Sigma) {
   
   tl <- length(lmb)
@@ -180,40 +121,51 @@ incompat_detect <- function(X, Y, R, fi, A, lmb, Sigma) {
   incompat_detect_like(X, Y, R, fi, A, lmb, Sigma)
 }
 
-zinf_verify <- function(X, Y, R, fi) {
+zinf_max_fi <- function(X, Y, R) {
   
-  zinf_max_fi <- function(X, Y, R) {
+  n <- length(X)
+  k <- ncol(R)
+  encR <- colSums(t(R) * 2^(seq_len(k)-1))
+  
+  max_fi <- list(list(1, 1), list(1, 1))
+  for (x in c(0, 1)) for (y in c(0, 1)) {
     
-    n <- length(X)
-    k <- ncol(R)
-    encR <- colSums(t(R) * 2^(seq_len(k)-1))
-    
-    max_fi <- list(list(1, 1), list(1, 1))
-    for (x in c(0, 1)) for (y in c(0, 1)) {
-      
-      idx <- (X == x) & (Y == y)
-      max_fi[[1+x]][[1+y]] <- mean(encR[idx] == 0)
-    }
-    
-    max_fi
+    idx <- (X == x) & (Y == y)
+    max_fi[[1+x]][[1+y]] <- mean(encR[idx] == 0)
   }
   
+  max_fi
+}
+
+zinf_verify <- function(X, Y, R, fi) {
+  
   max_fi <- zinf_max_fi(X, Y, R)
+  pairs <- c()
   for (x in c(0, 1)) for (y in c(0, 1)) {
     
     if (any(fi[[1+x]][[1+y]] > max_fi[[1+x]][[1+y]])) {
       
-      message(
-        paste0(
-          "Specified fi value would imply that ",
-          "P(R = (0,...,0) | X = ", x, ", Y = ", y, ") < 0. \n",
-          "Consider adjusting the parameter value(s) of the ZINF method.\n",
-          "For two-stage-em solver, you may wish to run with argument ",
-          "`detect_viol = TRUE`"
-        )
-      )
+      pairs <- rbind(pairs, c(x, y))
     }
   }
+  
+  if (!is.null(pairs)) {
+    
+    xy_col <- c()
+    for (i in seq_len(nrow(pairs))) {
+      
+      xy_col <- c(xy_col, paste0("(", pairs[i, 1], ",", pairs[i, 2], ")"))
+    }
+    xy_col <- paste0(xy_col, collapse = ", ")
+    
+    message(
+      paste0(
+        "fi value would imply that ",
+        "P(R = (0,...,0) | X = x, Y = y) < 0 for (x,y): ", xy_col, ". \n",
+        "Consider adjusting fi value(s) of the ZINF method.\n",
+        "For the em solver, you may wish to run with argument ",
+        "`detect_viol = TRUE`"
+      )
+    )
+  }
 }
-
-

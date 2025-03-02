@@ -42,7 +42,7 @@ for (n in n_seq) {
       
       # get the Louis standard error
       frun <- binsensate(X = dat$X, Y = dat$Y, R = dat$R, fi = fi, 
-                         solver = "two-stage-em", se = TRUE)
+                         solver = "em", se = TRUE)
       
       se_louis <- frun$beta_se
       
@@ -52,7 +52,7 @@ for (n in n_seq) {
         function(boot) {
           b_idx <- sample.int(n = n, replace = TRUE)
           brun <- binsensate(X = dat$X[b_idx], Y = dat$Y[b_idx], R = dat$R[b_idx, ], 
-                             fi = fi, solver = "two-stage-em")
+                             fi = fi, solver = "em")
           brun$beta
         }, mc.cores = n_cores()
       )

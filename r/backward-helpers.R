@@ -46,6 +46,7 @@ infer_pz <- function(z, pr, phi, k, weights = FALSE) {
 
 trade_inv_prob_ZINF <- function(pz, pr, fi) {
   
+  k <- as.integer(log(length(pz), 2))
   while(TRUE) {
     
     pz_neg_init <- pz[1]
@@ -61,7 +62,6 @@ trade_inv_prob_ZINF <- function(pz, pr, fi) {
     alpha <- min(min(fi / abs(fi_grad), na.rm = TRUE), 1)
     gain <- -Inf
     c <- 1/2
-    message("Init alpha =", alpha, ";")
     while( gain < c * alpha * sum(fi_grad^2) ) {
       
       alpha <- alpha / 2
@@ -83,9 +83,6 @@ trade_inv_prob_ZINF <- function(pz, pr, fi) {
     # update the pz
     pz <- cpp_Ainv_xy_zinf(fi, k) %*% pr
     
-    # message about progress
-    message("Sum of negatives", sum(pz[pz < 0]), "\n")
-    
     # check if the stopping criterion is achieved
     if(abs(sum(pz[pz < 0])) < 10^(-5)) break
   }
@@ -93,7 +90,7 @@ trade_inv_prob_ZINF <- function(pz, pr, fi) {
   fi
 }
 
-trade_inv_prob_IM <- function(pz, pr, Ainv, fi) {
+trade_inv_prob_IF <- function(pz, pr, Ainv, fi) {
   
   k <- length(fi)
   while(TRUE) {
@@ -103,7 +100,7 @@ trade_inv_prob_IM <- function(pz, pr, Ainv, fi) {
     
     pz_neg_init <- pz[neg_idx]
     
-    fi_grad <- cpp_fi_grad_IM(Ainv, neg_idx, pr, fi)
+    fi_grad <- cpp_fi_grad_IF(Ainv, neg_idx, pr, fi)
     
     # expecting all fi_grad to have negative direction (!)
     fi_grad[fi_grad > 0] <- 0 # don't allow increases in fi
@@ -113,7 +110,6 @@ trade_inv_prob_IM <- function(pz, pr, Ainv, fi) {
     alpha <- min(min(fi / abs(fi_grad), na.rm = TRUE), 1)
     gain <- -Inf
     c <- 1/2
-    message("Init alpha =", alpha, ";")
     while( gain < c * alpha * sum(fi_grad^2) ) {
       
       alpha <- alpha / 2
@@ -143,7 +139,7 @@ trade_inv_prob_IM <- function(pz, pr, Ainv, fi) {
       seq_len(2^k),
       function(z) infer_pz(z, pr, fi, k, TRUE)
     ))
-    message("Sum of negatives", sum(pz[pz < 0]), "\n")
+    
     if(abs(sum(pz[pz < 0])) < 10^(-5)) break
   }
   
@@ -175,27 +171,6 @@ fi_trade <- function(fi, fi_new, x, y) {
   }
   
   fi
-}
-
-#' @importFrom ggplot2 ggplot geom_col theme_bw facet_grid ylab xlab aes
-fi_prof <- function(fi) {
-  
-  k <- length(fi[[1]][[1]])
-  fi_prof <- data.frame(
-    rbind(
-      cbind(fi[[1]][[1]], 0, 0, seq_len(k)),
-      cbind(fi[[1]][[2]], 0, 1, seq_len(k)),
-      cbind(fi[[2]][[1]], 1, 0, seq_len(k)),
-      cbind(fi[[2]][[2]], 1, 1, seq_len(k))
-    )
-  )
-  names(fi_prof) <- c("val", "x", "y", "feature")
-  fi_prof$x <- paste("X =", fi_prof$x)
-  fi_prof$y <- paste("Y =", fi_prof$y)
-  ggplot(fi_prof, aes(x = feature, y = val)) +
-    geom_col(position = "dodge") + theme_bw() +
-    facet_grid(x ~ y) +
-    ylab(latex2exp::TeX("$\\phi$ value")) + xlab("Feature Number")
 }
 
 check_simplex <- function(pzx) {

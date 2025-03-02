@@ -26,7 +26,6 @@ py_xz <- function(th, x) {
     function(i) binsensate:::cpp_idx_to_bit(i, k)
   )
   all_z <- do.call(rbind, all_z)
-  # browser()
   expit(as.vector(all_z %*% mu) + m_icept + beta * x)
 }
 
@@ -98,8 +97,6 @@ nabla_Q <- function(th_p, th, th_s, fi, full = FALSE) {
       grad_termsy[[1+x]][[1+y]] <- pz_rxy_ty %*% cbind(1, all_z, x)
       
       grad_tot <- grad_tot + c(grad_x, grad_y)
-      
-      # if (x == 1 & y == 1) browser()
     }
   }
   

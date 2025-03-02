@@ -249,8 +249,6 @@ diff_nabla_simp <- function(th_p, th, th_s) {
       grad_y <- colSums((pz_rxy_ty * p_rxy_s) %*% cbind(1, all_z, x))
       
       grad_tot <- grad_tot + c(grad_x, grad_y)
-      
-      # if (x == 1 & y == 1) browser()
     }
   }
   

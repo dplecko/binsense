@@ -29,12 +29,12 @@ rng_to_df <- function(pattern, fi_seq, fi_seq2 = NULL) {
 
 search_space <- function(pattern = c("agn", "x", "y"),
                          type = c("range", "bound"),
-                         method = c("IM", "ZINF"),
+                         method = c("IF", "ZINF"),
                          fi, fi2 = NULL, k) {
   
   pattern <- match.arg(pattern, c("agn", "x", "y"))
   type <- match.arg(type, c("range", "bound"))
-  method <- match.arg(method, c("IM", "ZINF"))
+  method <- match.arg(method, c("IF", "ZINF"))
   
   params <- rng_to_df(pattern, fi_seq = fi, fi_seq2 = fi2)
   params$ATE <- NA
@@ -154,7 +154,8 @@ bounded_optim <- function(pattern, opt_params, params, dat, method, solver) {
   opt_params
 } 
 
-spc_optim <- function(type, opt_params, params, dat, method, solver, gt) {
+spc_optim <- function(type, opt_params, params, dat, method, solver, 
+                      gt, se, detect_viol) {
   
   if (type == "bound") {
     
@@ -170,9 +171,18 @@ spc_optim <- function(type, opt_params, params, dat, method, solver, gt) {
   if (gt) {
     
     assert_that(!is.na(params$ATE[1]))
+    
+    # infer coefficients
+    theta_gt <- attr(gt, "theta_gt")
+    Sigma0 <- theta_gt$Sigma0
+    lambda <- theta_gt$lambda
+    mu <- theta_gt$mu
+    mu_mod <- theta_gt$mu_mod
+    
+    seed <- sample.int(10^5, size = 1)
     dati <- synth_data_mid(
       n = nrow(dat$R), k = nrow(Sigma0),
-      fi = fi,
+      seed = seed, fi = fi, method = method,
       class = "expfam-2d",
       Sigma = Sigma0, lam = lambda[-1], mu = mu[-1],
       icept_x = lambda[1], icept_y = mu[1],
@@ -181,7 +191,24 @@ spc_optim <- function(type, opt_params, params, dat, method, solver, gt) {
   } else dati <- dat
   
   res <- binsensate(dati$X, dati$Y, dati$R, fi = fi, method = method,
-                    solver = solver, se = TRUE)
+                    solver = solver, se = se, detect_viol = detect_viol)
+  
+  # need to run bootstrap for backward solver
+  if (solver == "backward" & se) {
+    
+    nboot <- 50
+    ate_boot <- c()
+    for (nb in seq_len(nboot)) {
+      
+      b_idx <- sample.int(length(dati$X), replace = TRUE)
+      ate_b <- binsensate(dati$X[b_idx], dati$Y[b_idx], dati$R[b_idx, ], 
+                          fi = fi, method = method, solver = solver)$ATE
+      ate_boot <- c(ate_boot, ate_b)
+    }
+    ate_sd <- sd(ate_boot)
+    res$ATE_lwr <- res$ATE - 1.96 * ate_sd
+    res$ATE_upr <- res$ATE + 1.96 * ate_sd
+  }
   
   if (gt) {
     
@@ -206,7 +233,8 @@ spc_optim <- function(type, opt_params, params, dat, method, solver, gt) {
   params
 }
 
-infer_search <- function(dat, spc, solver, gt = FALSE, nbreaks = 5) {
+infer_search <- function(dat, spc, solver, gt = FALSE, se = FALSE, 
+                         detect_viol = FALSE, nbreaks = 5) {
   
   pattern <- spc$pattern
   if (spc$type == "bound") {
@@ -222,31 +250,41 @@ infer_search <- function(dat, spc, solver, gt = FALSE, nbreaks = 5) {
   # if replicating with known ground truth, fit models
   if (gt) {
     
-    Sigma0 <- binsensate:::infer_Sigma_IM(dat$X, dat$Y, dat$R, 
+    Sigma0 <- binsensate:::infer_Sigma_IF(dat$X, dat$Y, dat$R, 
                                           fi = list(list(0, 0), list(0, 0)))
     lambda <- glm(X ~ ., data = data.frame(X = dat$X, R = dat$R), 
                   family = "binomial")$coef
     mu_mod <- glm(Y ~ ., data = data.frame(Y = dat$Y, X = dat$X, R = dat$R), 
                   family = "binomial")
     mu <- mu_mod$coef[-2]
+    theta_gt <- list(Sigma0 = Sigma0, lambda = lambda, mu_mod = mu_mod, mu = mu)
     spc$params$ATE_gt <- NA
-  }
+    attr(gt, "theta_gt") <- theta_gt
+  } else theta_gt <- NULL
   
-  params <- mclapply(
+  params <- lapply(
     seq_len(nrow(spc$params)),
     function(i) {
       spc_optim(type, spc$opt_params[[i]], spc$params[i,],
-                dat, spc$method, solver, gt)
-    },
-    mc.cores = n_cores()
+                dat, spc$method, solver, gt, se, detect_viol)
+    }#, mc.cores = n_cores()
   )
   
   spc$params <- do.call(rbind, params)
   spc
 }
 
-spc_plot <- function(spc) {
+spc_plot <- function(spc, spc2 = NULL) {
   
   pattern <- spc$pattern
-  grid_to_plt(spc$params, spc$pattern, spc$method)
+  method <- spc$method
+  params <- spc$params
+  params$method <- method
+  if (!is.null(spc2)) {
+    
+    params <- rbind(params, cbind(spc2$params, method = spc2$method))
+    pattern <- "multi"
+  }
+
+  grid_to_plt(params, pattern, method)
 }

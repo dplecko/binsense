@@ -1,7 +1,7 @@
 
 synth_data_mid <- function(n = 10^4, k = 5, seed = 22, 
                            fi = list(list(0.3, 0.3), list(0.3, 0.3)),
-                           method = c("IM", "ZINF"),
+                           method = c("IF", "ZINF"),
                            A = NULL,
                            class = c("latent_u", "expfam-1d", "expfam-2d",
                                      "expfam-2d*"),
@@ -10,7 +10,7 @@ synth_data_mid <- function(n = 10^4, k = 5, seed = 22,
                            icept_x = NULL, icept_y = NULL,
                            beta = NULL) {
   
-  method <- match.arg(method, c("IM", "ZINF"))
+  method <- match.arg(method, c("IF", "ZINF"))
   class <- match.arg(class, c("latent_u", "expfam-1d", "expfam-2d", 
                               "expfam-2d*"))
   assertthat::assert_that(class %in% c("latent_u", "expfam-1d", "expfam-2d", 
@@ -70,7 +70,7 @@ synth_data_mid <- function(n = 10^4, k = 5, seed = 22,
   R <- Z
   pz_xy <- pr_xy <- lxy <- list(list(NULL, NULL), list(NULL, NULL))
   
-  if (!is.null(A) & method != "IM") { # code for generalized missingness
+  if (!is.null(A) & method != "IF") { # code for generalized missingness
     
     for (x in c(T, F)) {
       

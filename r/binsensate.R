@@ -11,22 +11,23 @@
 #' of which are lists. The entry `fi[[1+x]][[1+y]]` contains the sensitivity 
 #' parameter corresponding to the probability that a confounder is unobserved for
 #' the specific value of X = x, Y = y.
+#' @param method Character taking values `"IF"` for independent fidelity, or
+#' `"ZINF"` for the zero-inflation fidelity pattern.
 #' @param A Sensitivity parameters that  List with two entries, both 
 #' of which are lists. The entry `A[[1+x]][[1+y]]` contains the entries of the 
 #' fidelity matrix A_xy for X = x, Y = y. Default to NULL (in which case) `fi` is
 #' used to infer the value of A_xy.
 #'@param solver Character scalar describing the solution method, 
-#' either `"backward"` (non-parametric approach) 
-#' or `"two-stage-em"` (parametric EM).
-#' @param ... Further arguments passed to subroutine \code{\link{two_stage_em}}.
+#' either `"backward"` (non-parametric approach) or `"em"` (parametric EM).
+#' @param ... Further arguments passed to subroutine \code{\link{em_solver}}.
 #' @importFrom Rcpp sourceCpp
 #' @useDynLib binsensate
 #' @export
-binsensate <- function(X, Y, R, fi, method = c("IM", "ZINF"), A = NULL,
-                       solver = c("backward", "two-stage-em"), ...) {
+binsensate <- function(X, Y, R, fi, method = c("IF", "ZINF"), A = NULL,
+                       solver = c("backward", "em"), ...) {
   
-  solver <- match.arg(solver, c("backward", "two-stage-em"))
-  method <- match.arg(method, c("IM", "ZINF"))
+  solver <- match.arg(solver, c("backward", "em"))
+  method <- match.arg(method, c("IF", "ZINF"))
   
   if (!is.null(A)) {
     
@@ -46,7 +47,7 @@ binsensate <- function(X, Y, R, fi, method = c("IM", "ZINF"), A = NULL,
   switch(
     solver,
     backward = backward_solver(X, Y, R, fi, method, A),
-    `two-stage-em` = two_stage_em(X, Y, R, fi, method, A, ...)
+    em = em_solver(X, Y, R, fi, method, A, ...)
   )
 }
 
@@ -54,7 +55,7 @@ binsensate <- function(X, Y, R, fi, method = c("IM", "ZINF"), A = NULL,
 #' 
 #' @inheritParams binsensate
 #' @export
-backward_solver <- function(X, Y, R, fi, method, A, fi_change = FALSE) {
+backward_solver <- function(X, Y, R, fi, method, A) {
   
   k <- ncol(R)
   enc_mat <- t(replicate(nrow(R), 2^(seq_len(k) - 1L)))
@@ -87,7 +88,7 @@ backward_solver <- function(X, Y, R, fi, method, A, fi_change = FALSE) {
       pr[[x + 1]][[y + 1]] <- cprxy
       
       # obtain the inverse of the matrix
-      if (is.element(method, c("IM", "ZINF"))) {
+      if (is.element(method, c("IF", "ZINF"))) {
         
         A_inv_xy <- fi_to_Ainv_xy(fi[[1+x]][[1+y]], k, method)
       } else A_inv_xy <- solve(A[[1+x]][[1+y]])
@@ -95,7 +96,7 @@ backward_solver <- function(X, Y, R, fi, method, A, fi_change = FALSE) {
       # obtain P(z | x,y) estimator using matrix inversion
       pz[[x + 1]][[y + 1]] <- A_inv_xy %*% pr[[x + 1]][[y + 1]]
       
-      # perform simplex check for IM family
+      # perform simplex check for IF family
       if (check_simplex(pz[[x + 1]][[y + 1]])) {
         
         initial <- pz[[x + 1]][[y + 1]]
@@ -104,11 +105,11 @@ backward_solver <- function(X, Y, R, fi, method, A, fi_change = FALSE) {
         if (ill_pose_sig(pz[[x + 1]][[y + 1]], pr[[x + 1]][[y + 1]], 
                          A_inv_xy, nsamp = sum(idx))) {
           
-          # update parameters to more appropriate values for IM method
-          if (method == "IM") { 
+          # update parameters to more appropriate values for IF method
+          if (method == "IF") { 
             
             # trade for a well-posed inverse problem
-            fi_new <- trade_inv_prob_IM(pz[[x + 1]][[y + 1]], 
+            fi_new <- trade_inv_prob_IF(pz[[x + 1]][[y + 1]], 
                                         pr[[x + 1]][[y + 1]], 
                                         A_inv_xy, fi[[x + 1]][[y + 1]])
             
@@ -194,20 +195,24 @@ backward_solver <- function(X, Y, R, fi, method, A, fi_change = FALSE) {
 #' @param n_epoch Number of epochs for the expectation-maximization algorithm.
 #' @param rand_init Whether the expectation-maximization parameters should have
 #' a random initialization. Defaults to `FALSE`.
+#' @param se Logical indicating whether to compute standard errors using the
+#' method of Louis. Defaults to `FALSE`.
+#' @param detect_viol Logical indicating whether to test for ill-posedness of the
+#' inverse problem. Defaults to `FALSE`.
 #' @importFrom stats glm runif
 #' @export
-two_stage_em <- function(X, Y, R, fi, method, A, mc_per_samp = 10, n_epoch = 10, 
-                         rand_init = FALSE, se = FALSE, detect_viol = FALSE) {
+em_solver <- function(X, Y, R, fi, method, A, mc_per_samp = 10, n_epoch = 10, 
+                      rand_init = FALSE, se = FALSE, detect_viol = FALSE) {
   
   # Step (0) - infer Sigma
   lmb <- Sigma <- list()
   
   k <- ncol(R)
   
-  if (method == "IM") { # for IM method, infer Sigma using method of moments
+  if (method == "IF") { # for IF method, infer Sigma using method of moments
     
-    Sigma[[1]] <- infer_Sigma_IM(X, Y, R, fi)
-  } else { # if method not IM, infer Sigma from the R correlation matrix
+    Sigma[[1]] <- infer_Sigma_IF(X, Y, R, fi)
+  } else { # if method not IF, infer Sigma from the R correlation matrix
     
     cor_mat <- t(R) %*% R / nrow(R)
     Sigma[[1]] <- tail(cormat_to_Sigma(cor_mat), n = 1L)[[1]]
@@ -249,7 +254,7 @@ two_stage_em <- function(X, Y, R, fi, method, A, mc_per_samp = 10, n_epoch = 10,
   if (k > 5 | method == "ZINF") { # possibly consider a chunking approach
     
     # re-order
-    enc <- 1 + rowSums(R * t(replicate(nrow(dat$R), 2^(seq_len(k) - 1))))
+    enc <- 1 + rowSums(R * t(replicate(nrow(R), 2^(seq_len(k) - 1))))
     reord <- order(enc)
     R <- R[reord, ]
     X <- X[reord]
@@ -258,9 +263,9 @@ two_stage_em <- function(X, Y, R, fi, method, A, mc_per_samp = 10, n_epoch = 10,
     
     chunks <- rle(enc)
     enc_vals <- chunks$values
-    brks <- c(1, cumsum(chunks$lengths))
-    starts <- brks[-length(brks)]
-    stops <- brks[-1]
+    starts <- c(1, 1 + cumsum(chunks$lengths))
+    starts <- starts[-length(starts)]
+    stops <- cumsum(chunks$lengths)
     zero_idx <- which(enc == 1) # seq_len(stops[1])
     nzero_idx <- setdiff(seq_len(length(X)), zero_idx)
     
@@ -275,11 +280,6 @@ two_stage_em <- function(X, Y, R, fi, method, A, mc_per_samp = 10, n_epoch = 10,
     beta <- lmb[[i]]$beta
     
     if (by_chunk | method == "ZINF") {
-      
-      # pb <- progress_bar$new(
-      #   format = "[:bar] :current/:total (:percent) elapsed: :elapsed",
-      #   total = length(enc_vals), clear = FALSE, width = 60
-      # )
       
       if (method == "ZINF") {
         
@@ -338,23 +338,17 @@ two_stage_em <- function(X, Y, R, fi, method, A, mc_per_samp = 10, n_epoch = 10,
               
               z_mc_idx <- sample(length(probs), size = num_xy * mc_per_samp, 
                                  prob = probs, replace = TRUE)
+              
               z_mc <- cpp_idx_to_bit(z_mc_idx - 1, k)
               ret <- rbind(ret, cbind(X = x, Y = y, Z = z_mc))
             }
-            
-            # pb$tick()
+
             ret
           },
           enc_vals, starts, stops
         )
       }
     } else {
-      
-      # # sample mc_samples for each actual sample
-      # pb <- progress_bar$new(
-      #   format = "[:bar] :current/:total (:percent) elapsed: :elapsed",
-      #   total = length(X) / 100, clear = FALSE, width = 60
-      # )
       
       mc_twist <- lapply(
         seq_len(nrow(R)),
@@ -387,7 +381,6 @@ two_stage_em <- function(X, Y, R, fi, method, A, mc_per_samp = 10, n_epoch = 10,
         }
       )
     }
-    # cat("Monte-Carlo twist finished for epoch", i, "/", n_epoch,"\n")
     mc_twist <- as.data.frame(do.call(rbind, mc_twist))
     
     # re-fit for Sigma
@@ -419,64 +412,6 @@ two_stage_em <- function(X, Y, R, fi, method, A, mc_per_samp = 10, n_epoch = 10,
     Y_mc <- mc_twist[, 2]
     
     Sigma_idx <- which(!upper.tri(Sigma[[i+1]]))
-    
-    # # Sigma Hessian
-    # h_sigma <- cpp_hess_sigma(pz, Sigma_idx - 1, k)
-    # 
-    # # Lambda Hessian
-    # px_z <- expit(
-    #   cbind(1, cpp_idx_to_bit(seq_len(2^k)-1, k)) %*% 
-    #     c(lmb[[i+1]]$lambda_icept, lmb[[i+1]]$lambda)
-    # )
-    # h_lambda <- cpp_hess_lambda(pz, px_z, k)
-    # 
-    # # Mu Hessian
-    # py_x1z <- expit(
-    #   cbind(1, cpp_idx_to_bit(seq_len(2^k)-1, k), 1) %*% 
-    #     c(lmb[[i+1]]$mu_icept, lmb[[i+1]]$mu, lmb[[i+1]]$beta)
-    # )
-    # py_x0z <- expit(
-    #   cbind(1, cpp_idx_to_bit(seq_len(2^k)-1, k), 0) %*% 
-    #     c(lmb[[i+1]]$mu_icept, lmb[[i+1]]$mu, lmb[[i+1]]$beta)
-    # )
-    # h_mu <- cpp_hess_mu(pz, px_z, py_x0z, py_x1z, k)
-    # 
-    # hess_mat <- Matrix::bdiag(h_sigma, h_lambda, h_mu)
-    # 
-    # # Sigma score function S_c
-    # Sigma_se <- tail(cormat_to_Sigma(t(Z_mc) %*% Z_mc / nrow(Z_mc)), n = 1L)[[1]]
-    # 
-    # cor_mat <- t(Z_mc) %*% Z_mc / nrow(Z_mc)
-    # cumulant_adj <- gradient_2d_fi0(Sigma_se, # Sigma[[i+1]], 
-    #                                 cor_mat = matrix(0, ncol = ncol(Sigma[[i+1]]),
-    #                                                  nrow = nrow(Sigma[[i+1]])))
-    # cumulant_adj <- cumulant_adj[Sigma_idx]
-    # Sigma_term <- do.call(rbind, lapply(
-    #   seq_len(nrow(Z_mc)),
-    #   function(i) {
-    #     
-    #     unit_cor <- 2 * (Z_mc[i, ] %*% t(Z_mc[i, ]))
-    #     diag(unit_cor) <- diag(unit_cor) / 2
-    #     unit_cor[Sigma_idx] + cumulant_adj
-    #   }
-    # ))
-    # 
-    # # Lambda score function S_c
-    # logit_x_mc <- as.vector(Z_mc %*% lmb[[i+1]]$lambda + lmb[[i+1]]$lambda_icept)
-    # px_z_mc <- expit(logit_x_mc)
-    # 
-    # # Mu score function S_c
-    # logit_y_mc <- as.vector(Z_mc %*% lmb[[i+1]]$mu + lmb[[i+1]]$mu_icept +
-    #                           lmb[[i+1]]$beta * X_mc)
-    # py_xz_mc <- expit(logit_y_mc)
-    # 
-    # Ztilde <- cbind(1, Z_mc)
-    # Vtilde <- cbind(1, X_mc, Z_mc)
-    # 
-    # S_c <- cbind(Sigma_term, Ztilde * (X_mc - px_z_mc), Vtilde * (Y_mc - py_xz_mc))
-    # fisher_mat <- hess_mat - t(S_c) %*% S_c / nrow(S_c)
-    # 
-    # louis_se <- sqrt(solve(fisher_mat)[length(fisher_mat)] / length(X))
     
     # compute via Exponential families
     tX <- do.call(rbind, lapply(
@@ -527,7 +462,8 @@ two_stage_em <- function(X, Y, R, fi, method, A, mc_per_samp = 10, n_epoch = 10,
   if (detect_viol) {
     
     if (incompat_detect(X, Y, R, fi, A, lmb, Sigma)) {
-      message("Missingness pattern may be incompatible with the observed data.\n")
+      
+      message("Inverse problem may be ill-posed with current fi parameter.\n")
       fi_change <- TRUE 
     } else fi_change <- FALSE
   } else fi_change <- FALSE
