@@ -14,4 +14,4 @@ The code used for reproducing the results of the paper is contained in the `scri
 | [Fig. 3](#): Parametric inference of $\phi$-values. | `scripts/new-search.R` | 
 | [Fig. 4](#): Inference of $x$-specific $\phi$-values with a known ground truth. | `scripts/new-search.R` | 
 | [Fig. 5](#): Investigating First-Order & Gradient Stability on MIMIC-IV data. | `scripts/fos-gs-cond.R` |
-| [Fig. 6](#): Sensitivity of EM to initial parameter values. | `scripts/init-sense.R` }
+| [Fig. 6](#): Sensitivity of EM to initial parameter values. | `scripts/init-sense.R` |
