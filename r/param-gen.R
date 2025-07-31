@@ -9,6 +9,7 @@ z_2d <- function(k, n_samp, seed = 2022, Sigma) {
   cpp_idx_to_bit(z-1, k)
 }
 
+#' @importFrom stats rbinom
 param_mod_gen <- function(n, k, seed, A, Sigma, lam, mu, icept_x, icept_y, beta) {
   
   set.seed(seed)

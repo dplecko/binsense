@@ -33,6 +33,34 @@ cpp_fi_grad_IF <- function(Ainv, neg_idx, pr, fi) {
     .Call('_binsensate_cpp_fi_grad_IF', PACKAGE = 'binsensate', Ainv, neg_idx, pr, fi)
 }
 
+cpp_isserlis <- function(ind, mu, Sigma0) {
+    .Call('_binsensate_cpp_isserlis', PACKAGE = 'binsensate', ind, mu, Sigma0)
+}
+
+cpp_eta <- function(i, j, k, l, mu, Sigma0, p) {
+    .Call('_binsensate_cpp_eta', PACKAGE = 'binsensate', i, j, k, l, mu, Sigma0, p)
+}
+
+cpp_lambda <- function(i, j, k, l, dim, p) {
+    .Call('_binsensate_cpp_lambda', PACKAGE = 'binsensate', i, j, k, l, dim, p)
+}
+
+cpp_logc_ij_cts <- function(Amut, Ez, idx, Sigma0, Sig0Lam, p, d) {
+    .Call('_binsensate_cpp_logc_ij_cts', PACKAGE = 'binsensate', Amut, Ez, idx, Sigma0, Sig0Lam, p, d)
+}
+
+cpp_hess_cts <- function(Amut, Ez, idx, Sigma0, Sig0Lam, p, d) {
+    .Call('_binsensate_cpp_hess_cts', PACKAGE = 'binsensate', Amut, Ez, idx, Sigma0, Sig0Lam, p, d)
+}
+
+cpp_pzw_prop <- function(Sigma, LamTw) {
+    .Call('_binsensate_cpp_pzw_prop', PACKAGE = 'binsensate', Sigma, LamTw)
+}
+
+cpp_hess_cts_fast <- function(Amut, Ez, idx, Sigma0, Sig0Lam, p, d) {
+    .Call('_binsensate_cpp_hess_cts_fast', PACKAGE = 'binsensate', Amut, Ez, idx, Sigma0, Sig0Lam, p, d)
+}
+
 cpp_idx <- function(x, a, b, dim) {
     .Call('_binsensate_cpp_idx', PACKAGE = 'binsensate', x, a, b, dim)
 }

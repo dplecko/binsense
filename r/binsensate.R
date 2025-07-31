@@ -11,6 +11,10 @@
 #' of which are lists. The entry `fi[[1+x]][[1+y]]` contains the sensitivity 
 #' parameter corresponding to the probability that a confounder is unobserved for
 #' the specific value of X = x, Y = y.
+#' @param W The set of correctly observed continuous confounders, which should be
+#' mean centered and variance normalized. Defaults to `NULL`, meaning no continuous
+#' confounders are included. If `W` is included, the continous EM routine is used
+#' automatically (`W` cannot be used with the \code{\link{backward_solver}}).
 #' @param method Character taking values `"IF"` for independent fidelity, or
 #' `"ZINF"` for the zero-inflation fidelity pattern.
 #' @param A Sensitivity parameters that  List with two entries, both 
@@ -19,11 +23,12 @@
 #' used to infer the value of A_xy.
 #'@param solver Character scalar describing the solution method, 
 #' either `"backward"` (non-parametric approach) or `"em"` (parametric EM).
-#' @param ... Further arguments passed to subroutine \code{\link{em_solver}}.
+#' @param ... Further arguments passed to subroutines \code{\link{em_solver}} or
+#' \code{\link{em_solver_cts}}.
 #' @importFrom Rcpp sourceCpp
 #' @useDynLib binsensate
 #' @export
-binsensate <- function(X, Y, R, fi, method = c("IF", "ZINF"), A = NULL,
+binsensate <- function(X, Y, R, fi, W = NULL, method = c("IF", "ZINF"), A = NULL,
                        solver = c("backward", "em"), ...) {
   
   solver <- match.arg(solver, c("backward", "em"))
@@ -44,10 +49,18 @@ binsensate <- function(X, Y, R, fi, method = c("IF", "ZINF"), A = NULL,
   
   if (method == "ZINF") zinf_verify(X, Y, R, fi)
   
+  if (!is.null(W)) {
+    
+    if (solver == "backward")
+      message("Switching to `em` solver since `W` argument is provided.\n")
+    solver <- "em-cts"
+  }
+
   switch(
     solver,
     backward = backward_solver(X, Y, R, fi, method, A),
-    em = em_solver(X, Y, R, fi, method, A, ...)
+    em = em_solver(X, Y, R, fi, method, A, ...),
+    `em-cts` = em_solver_cts(X, Y, R, W, fi, method, A, ...)
   )
 }
 
@@ -486,6 +499,255 @@ em_solver <- function(X, Y, R, fi, method, A, mc_per_samp = 10, n_epoch = 10,
   
   list(
     pz = pz,
+    ATE = ATE_hat,
+    ATE_lwr = ATE_lwr,
+    ATE_upr = ATE_upr,
+    solver = "two-stage-ecm",
+    fi_change = fi_change,
+    Sigma = Sigma,
+    beta = beta,
+    beta_se = louis_se,
+    theta = lmb
+  )
+}
+
+#' Binary Sensitivity Analysis using Expectation-Maximization in an Exponential
+#' Family with Correctly Observed Continuous Confounders
+#' 
+#' @inheritParams binsensate
+#' @inheritParams em_solver
+#' @param mc_cores Number of cores used for parallelization during Monte Carlo
+#' sampling in the M-step.
+#' @importFrom parallel mclapply
+#' @export
+em_solver_cts <- function(X, Y, R, W, fi, method, A, 
+                          mc_per_samp = 10, n_epoch = 10, 
+                          rand_init = FALSE, se = FALSE, detect_viol = FALSE,
+                          mc_cores = NULL) {
+  
+  # Step (0) - infer Sigma
+  lmb <- theta <- Sigma <- list()
+  k <- ncol(R)
+  d <- ncol(W)
+  k_index <- seq_len(k)
+  d_index <- k + seq_len(d)
+  
+  cor_mat <- t(cbind(R, W)) %*% cbind(R, W) / nrow(R)
+  theta[[1]] <- tail(cormat_to_Sigma_cts(cor_mat, k, d), n = 1L)[[1]]
+  
+  # extract Sigma, Lambda, Sigma0
+  Sigma <- theta[[1]][seq_len(k), seq_len(k)]
+  Lambda <- theta[[1]][-seq_len(k), seq_len(k), drop=FALSE]
+  Omega <- theta[[1]][-seq_len(k), -seq_len(k)]
+  
+  # Step (0+) - infer initial lambda, mu, beta
+  fit_lmb <- function(X, Y, R, W) {
+    
+    xfit <- glm(X ~ ., data = data.frame(X = X, R = R, W = W), family = "binomial")
+    xz_coeff <- grepl("^R", names(xfit$coefficients))
+    xw_coeff <- grepl("^W", names(xfit$coefficients))
+    lambda_z <- xfit$coefficients[xz_coeff]
+    lambda_w <- xfit$coefficients[xw_coeff]
+    lambda_icept <- xfit$coefficients[1]
+    
+    yfit <- glm(Y ~ ., data = data.frame(Y = Y, X = X, R = R, W = W), 
+                family = "binomial")
+    yz_coeff <- grepl("^R", names(yfit$coefficients))
+    yw_coeff <- grepl("^W", names(yfit$coefficients))
+    
+    mu_icept <- yfit$coefficients[1]
+    mu_z <- yfit$coefficients[yz_coeff]
+    mu_w <- yfit$coefficients[yw_coeff]
+    beta0 <- yfit$coefficients["X"]
+    
+    list(lambda_z = lambda_z, lambda_w = lambda_w, lambda_icept = lambda_icept,
+         mu_z = mu_z, mu_w = mu_w, mu_icept = mu_icept,
+         beta = beta0, beta_se = summary(yfit)$coefficients["X", "Std. Error"])
+  }
+  
+  if (!rand_init) {
+    
+    lmb[[1]] <- fit_lmb(X, Y, R, W)
+  } else {
+    
+    lmb[[1]] <- list(lambda_z = runif(ncol(R), -1, 1), 
+                     lambda_w = runif(ncol(W), -1, 1), 
+                     mu_z = runif(ncol(R), -1, 1), mu_w = runif(ncol(W), -1, 1), 
+                     beta = runif(1, -1, 1), 
+                     lambda_icept = runif(1, -1, 1), mu_icept = runif(1, -1, 1))
+  }
+  
+  # check if fi == 0; MC steps not needed
+  A_id <- fi_to_A_xy(rep(0, ncol(R)), ncol(R), "IF")
+  mfi <- 0
+  for (x in c(1, 2)) for (y in c(1, 2)) mfi <- max(mfi, max(abs(A[[x]][[y]] - A_id)))
+  if (mfi == 0) {
+    n_epoch <- 0
+    ZW_mc <- cbind(Z = R, W = W)
+    se <- FALSE
+  }
+  
+  final_run <- FALSE # flag for last iteration (for Z,W Monte Carlo)
+  for (i in seq_len(n_epoch)) {
+    
+    # get px_z, py_z
+    logitx_z <- cpp_p_z(lmb[[i]]$lambda_z) + lmb[[i]]$lambda_icept
+    logity_z <- cpp_p_z(lmb[[i]]$mu_z) + lmb[[i]]$mu_icept
+    beta <- lmb[[i]]$beta
+  
+    mc_fn <- function(j) {
+      
+      x <- X[j]
+      y <- Y[j]
+      r <- R[j, ]
+      w <- W[j, ]
+      
+      # compute P(z, w)
+      pzw <- cpp_pzw_prop(Sigma, t(Lambda) %*% w)
+      
+      r_idx <- 1 + sum(r * 2^(seq_len(k)-1))
+      
+      # P(r | z, x, y) conditionals
+      pr_zxy <- A[[1 + x]][[1 + y]][r_idx, ]
+      
+      px_zw <- expit(logitx_z + sum(lmb[[i]]$lambda_w * w))
+      if (x == 1) px <- px_zw else px <- 1 - px_zw
+      
+      # if (j %% 100 == 0) pb$tick()
+      py_zw <- expit(logity_z + sum(lmb[[i]]$mu_w * w) + beta * x)
+      if (y == 1) py <- py_zw else py <- 1 - py_zw
+      
+      probs <- pzw * px * py * pr_zxy
+      probs <- probs / sum(probs)
+      
+      z_mc_idx <- sample(length(probs), size = mc_per_samp, prob = probs,
+                         replace = TRUE)
+      z_mc <- cpp_idx_to_bit(z_mc_idx - 1, length(r)) # returns a matrix
+      
+      cbind(X = x, Y = y, Z = z_mc, 
+            W = matrix(w, ncol = d, nrow = mc_per_samp, byrow = TRUE))
+    }
+    
+    if (!is.null(mc_cores)) {
+      
+      mc_twist <- mclapply(seq_len(nrow(R)), mc_fn, mc.cores = mc_cores)
+    } else {
+      
+      mc_twist <- lapply(seq_len(nrow(R)), mc_fn)
+    }
+    mc_twist <- as.data.frame(do.call(rbind, mc_twist))
+    
+    # re-fit for Sigma
+    ZW_mc <- as.matrix(mc_twist[, -c(1, 2)])
+    cor_mat <- t(ZW_mc) %*% ZW_mc / nrow(ZW_mc)
+    
+    if (final_run) break
+    
+    theta[[i+1]] <- tail(cormat_to_Sigma_cts(cor_mat, k, d), n = 1L)[[1]]
+    
+    # re-fit for lambda, mu, beta
+    lmb[[i+1]] <- fit_lmb(X = mc_twist[, 1], Y = mc_twist[, 2], 
+                          R = mc_twist[, 2 + k_index], 
+                          W = mc_twist[, 2 + d_index])
+    
+    # early stopping criterion
+    scale <- 1
+    converged <- vec_norm(lmb[[i+1]]$lambda_z - lmb[[i]]$lambda_z)^2 < 
+      scale * ncol(R) / nrow(R) &
+      vec_norm(lmb[[i+1]]$mu_z - lmb[[i]]$mu_z)^2 < scale * ncol(R) / nrow(R) &
+      lmb[[i+1]]$beta - lmb[[i]]$beta < scale / nrow(R)
+    if (converged) final_run <- TRUE
+  }
+  
+  # Louis' method for Standard Errors (SEs)
+  if (se) {
+
+    # get the latest Monte Carlo sample
+    ZW_mc <- as.matrix(mc_twist[, -c(1, 2)])
+    X_mc <- mc_twist[, 1]
+    Y_mc <- mc_twist[, 2]
+
+    theta_idx <- which(!upper.tri(theta[[i]]))
+
+    # compute via Exponential families
+    tX <- do.call(rbind, lapply(
+      seq_len(nrow(ZW_mc)),
+      function(i) {
+
+        unit_cor <- 2 * (ZW_mc[i, ] %*% t(ZW_mc[i, ]))
+        unit_cor[seq_len(k), seq_len(k)] <- 2 * unit_cor[seq_len(k), seq_len(k)]
+        unit_cor[-seq_len(k), -seq_len(k)] <- -1 * unit_cor[-seq_len(k), -seq_len(k)]
+        diag(unit_cor) <- diag(unit_cor) / 2
+
+        c(unit_cor[theta_idx], X_mc[i], ZW_mc[i, ] * X_mc[i], Y_mc[i],
+          ZW_mc[i, ] * Y_mc[i], Y_mc[i] * X_mc[i])
+      }
+    ))
+
+    covtX <- t(tX) %*% tX / nrow(tX) - colMeans(tX) %*% t(colMeans(tX))
+
+    covtX_y <- array(0, dim = dim(covtX))
+    for (i in seq_len(length(X))) {
+
+      mc_idx <- seq.int((i-1) * mc_per_samp + 1, i * mc_per_samp)
+
+      # Monte Carlo sample
+      tXi <- t(tX[mc_idx, , drop=FALSE])
+      tXi_c <- tXi - rowMeans(tXi)
+
+      covtX_y <- covtX_y + tXi_c %*% t(tXi_c) / mc_per_samp
+    }
+
+    covtX_y <- covtX_y / length(X)
+    se_mat <- tryCatch(
+      solve(covtX - covtX_y),
+      error = function(e) e
+    )
+    
+    if (inherits(se_mat, "error")) {
+
+      message(paste(
+        "Observed Fisher information matrix nearly singular.",
+        "Louis' method cannot be used."
+      ))
+      louis_se <- NA
+    } else {
+
+      louis_se <- sqrt(se_mat[length(covtX - covtX_y)] / length(X))
+      if (louis_se < 0) louis_se <- NA
+    }
+  } else louis_se <- NULL
+  
+  if (length(i) == 0) louis_se <- lmb[[1]]$beta_se
+  
+  # detecting incompatibility of fi with the observed data
+  if (detect_viol) {
+    
+    if (incompat_detect(X, Y, R, fi, A, lmb, Sigma)) {
+      
+      message("Inverse problem may be ill-posed with current fi parameter.\n")
+      fi_change <- TRUE 
+    } else fi_change <- FALSE
+  } else fi_change <- FALSE
+  
+  # ATE computation
+  tl <- length(lmb)
+  
+  beta <- lmb[[tl]]$beta
+  logity_zw <- cbind(1, ZW_mc) %*% c(lmb[[tl]]$mu_icept, lmb[[tl]]$mu_z, lmb[[tl]]$mu_w)
+  ATE_hat <- mean( (expit(logity_zw + beta) - expit(logity_zw)))
+  if (!is.null(louis_se)) {
+    
+    ATE_lwr <- mean( 
+      (expit(logity_zw + (beta - 1.96 * louis_se)) - expit(logity_zw))
+    )
+    ATE_upr <- mean( 
+      (expit(logity_zw + (beta + 1.96 * louis_se)) - expit(logity_zw))
+    )
+  } else ATE_lwr <- ATE_upr <- NULL
+  
+  list(
+    # pz = pz,
     ATE = ATE_hat,
     ATE_lwr = ATE_lwr,
     ATE_upr = ATE_upr,

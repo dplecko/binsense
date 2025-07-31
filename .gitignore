@@ -9,6 +9,7 @@ data
 *.so
 paper/
 results/
+reviews/
 .Rproj.user
 op.Rproj
 .Rbuildignore

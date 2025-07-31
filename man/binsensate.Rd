@@ -9,6 +9,7 @@ binsensate(
   Y,
   R,
   fi,
+  W = NULL,
   method = c("IF", "ZINF"),
   A = NULL,
   solver = c("backward", "em"),
@@ -28,6 +29,11 @@ of which are lists. The entry \code{fi[[1+x]][[1+y]]} contains the sensitivity
 parameter corresponding to the probability that a confounder is unobserved for
 the specific value of X = x, Y = y.}
 
+\item{W}{The set of correctly observed continuous confounders, which should be
+mean centered and variance normalized. Defaults to \code{NULL}, meaning no continuous
+confounders are included. If \code{W} is included, the continous EM routine is used
+automatically (\code{W} cannot be used with the \code{\link{backward_solver}}).}
+
 \item{method}{Character taking values \code{"IF"} for independent fidelity, or
 \code{"ZINF"} for the zero-inflation fidelity pattern.}
 
@@ -39,7 +45,8 @@ used to infer the value of A_xy.}
 \item{solver}{Character scalar describing the solution method,
 either \code{"backward"} (non-parametric approach) or \code{"em"} (parametric EM).}
 
-\item{...}{Further arguments passed to subroutine \code{\link{em_solver}}.}
+\item{...}{Further arguments passed to subroutines \code{\link{em_solver}} or
+\code{\link{em_solver_cts}}.}
 }
 \description{
 Binary Sensitivity Analysis

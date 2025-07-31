@@ -1,6 +1,6 @@
 
 #' @importFrom utils tail
-infer_Sigma_IF<- function(X, Y, R, fi) {
+infer_Sigma_IF <- function(X, Y, R, fi) {
   
   cor_mat <- XYR_to_cormat(X, Y, R, fi)
   tail(cormat_to_Sigma(cor_mat), n = 1)[[1]]
