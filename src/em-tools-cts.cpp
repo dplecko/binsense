@@ -190,10 +190,11 @@ NumericVector cpp_pzw_prop(NumericMatrix Sigma, NumericVector LamTw) {
     
     for (int ki = 0; ki < k; ++ki) {
       
+      pz(i) += LamTw(ki) * ((i & (1<<ki)) > 0);
+      
       for (int kj = 0; kj < k; ++kj) {
         
-        pz(i) += Sigma(ki, kj) * ((i & (1<<ki)) > 0) * ((i & (1<<kj)) > 0) +
-          LamTw(ki) * ((i & (1<<kj)) > 0);
+        pz(i) += Sigma(ki, kj) * ((i & (1<<ki)) > 0) * ((i & (1<<kj)) > 0);
       }
     }
     

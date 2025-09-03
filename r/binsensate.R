@@ -541,33 +541,9 @@ em_solver_cts <- function(X, Y, R, W, fi, method, A,
   Omega <- theta[[1]][-seq_len(k), -seq_len(k)]
   
   # Step (0+) - infer initial lambda, mu, beta
-  fit_lmb <- function(X, Y, R, W) {
-    
-    xfit <- glm(X ~ ., data = data.frame(X = X, R = R, W = W), family = "binomial")
-    xz_coeff <- grepl("^R", names(xfit$coefficients))
-    xw_coeff <- grepl("^W", names(xfit$coefficients))
-    lambda_z <- xfit$coefficients[xz_coeff]
-    lambda_w <- xfit$coefficients[xw_coeff]
-    lambda_icept <- xfit$coefficients[1]
-    
-    yfit <- glm(Y ~ ., data = data.frame(Y = Y, X = X, R = R, W = W), 
-                family = "binomial")
-    yz_coeff <- grepl("^R", names(yfit$coefficients))
-    yw_coeff <- grepl("^W", names(yfit$coefficients))
-    
-    mu_icept <- yfit$coefficients[1]
-    mu_z <- yfit$coefficients[yz_coeff]
-    mu_w <- yfit$coefficients[yw_coeff]
-    beta0 <- yfit$coefficients["X"]
-    
-    list(lambda_z = lambda_z, lambda_w = lambda_w, lambda_icept = lambda_icept,
-         mu_z = mu_z, mu_w = mu_w, mu_icept = mu_icept,
-         beta = beta0, beta_se = summary(yfit)$coefficients["X", "Std. Error"])
-  }
-  
   if (!rand_init) {
     
-    lmb[[1]] <- fit_lmb(X, Y, R, W)
+    lmb[[1]] <- fit_lmb_rw(X, Y, R, W)
   } else {
     
     lmb[[1]] <- list(lambda_z = runif(ncol(R), -1, 1), 
@@ -646,9 +622,9 @@ em_solver_cts <- function(X, Y, R, W, fi, method, A,
     theta[[i+1]] <- tail(cormat_to_Sigma_cts(cor_mat, k, d), n = 1L)[[1]]
     
     # re-fit for lambda, mu, beta
-    lmb[[i+1]] <- fit_lmb(X = mc_twist[, 1], Y = mc_twist[, 2], 
-                          R = mc_twist[, 2 + k_index], 
-                          W = mc_twist[, 2 + d_index])
+    lmb[[i+1]] <- fit_lmb_rw(X = mc_twist[, 1], Y = mc_twist[, 2], 
+                             R = mc_twist[, 2 + k_index], 
+                             W = mc_twist[, 2 + d_index])
     
     # early stopping criterion
     scale <- 1
@@ -753,9 +729,9 @@ em_solver_cts <- function(X, Y, R, W, fi, method, A,
     ATE_upr = ATE_upr,
     solver = "two-stage-ecm",
     fi_change = fi_change,
-    Sigma = Sigma,
+    SLO = theta,
     beta = beta,
     beta_se = louis_se,
-    theta = lmb
+    LMB = lmb
   )
 }

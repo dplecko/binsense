@@ -78,6 +78,23 @@ ate_to_or <- function(ate, mu_mod, R) {
   (b + a) / 2
 }
 
+ate_to_or_cts <- function(ate, mu_coef, R, W) {
+  
+  logits <- as.vector(cbind(1, R, W) %*% mu_coef)
+  
+  a <- -0.5
+  b <- 0.5
+  while (b - a > 0.0005) {
+    
+    beta <- (b+a) / 2
+    ate_b <- mean(expit(logits + beta) - expit(logits))
+    
+    if (ate_b > ate) b <- beta else a <- beta
+  }
+  
+  (b + a) / 2
+}
+
 bounded_optim <- function(pattern, opt_params, params, dat, method, solver) {
   
   flag <- TRUE
@@ -155,7 +172,7 @@ bounded_optim <- function(pattern, opt_params, params, dat, method, solver) {
 } 
 
 spc_optim <- function(type, opt_params, params, dat, method, solver, 
-                      gt, se, detect_viol) {
+                      gt, se, detect_viol, mc_cores) {
   
   if (type == "bound") {
     
@@ -171,32 +188,54 @@ spc_optim <- function(type, opt_params, params, dat, method, solver,
   if (gt) {
     
     assert_that(!is.na(params$ATE[1]))
-    
-    # infer coefficients
-    theta_gt <- attr(gt, "theta_gt")
-    Sigma0 <- theta_gt$Sigma0
-    lambda <- theta_gt$lambda
-    mu <- theta_gt$mu
-    mu_mod <- theta_gt$mu_mod
-    
-    seed <- sample.int(10^5, size = 1)
-    dati <- synth_data_mid(
-      n = nrow(dat$R), k = nrow(Sigma0),
-      seed = seed, fi = fi, method = method,
-      class = "expfam-2d",
-      Sigma = Sigma0, lam = lambda[-1], mu = mu[-1],
-      icept_x = lambda[1], icept_y = mu[1],
-      beta = ate_to_or(params$ATE[1], mu_mod, dat$R)
-    )
+    if (is.element("W", names(dat))) {
+      
+      theta_gt <- attr(gt, "theta_gt")
+      seed <- sample.int(10^5, size = 1)
+      dati <- synth_data_mid(
+        n = nrow(dat$R), k = nrow(theta_gt$Sigma),
+        seed = seed, fi = fi, method = method,
+        class = "expfam-2d-cts",
+        Sigma = theta_gt$Sigma, 
+        SLO = theta_gt$SLO,
+        lam = c(theta_gt$lambda_z, theta_gt$lambda_w), 
+        mu = c(theta_gt$mu_z, theta_gt$mu_w),
+        icept_x = theta_gt$lambda_icept, icept_y = theta_gt$mu_icept,
+        beta = ate_to_or_cts(
+          params$ATE[1], 
+          c(theta_gt$mu_icept, theta_gt$mu_z, theta_gt$mu_w), 
+          dat$R, dat$W
+        )
+      )
+    } else {
+      
+      # infer coefficients
+      theta_gt <- attr(gt, "theta_gt")
+      Sigma0 <- theta_gt$Sigma0
+      lambda <- theta_gt$lambda
+      mu <- theta_gt$mu
+      mu_mod <- theta_gt$mu_mod
+      
+      seed <- sample.int(10^5, size = 1)
+      dati <- synth_data_mid(
+        n = nrow(dat$R), k = nrow(Sigma0),
+        seed = seed, fi = fi, method = method,
+        class = "expfam-2d",
+        Sigma = Sigma0, lam = lambda[-1], mu = mu[-1],
+        icept_x = lambda[1], icept_y = mu[1],
+        beta = ate_to_or(params$ATE[1], mu_mod, dat$R)
+      )
+    }
   } else dati <- dat
   
-  res <- binsensate(dati$X, dati$Y, dati$R, fi = fi, method = method,
-                    solver = solver, se = se, detect_viol = detect_viol)
+  res <- binsensate(dati$X, dati$Y, dati$R, W = dati$W, fi = fi, method = method,
+                    solver = solver, se = se, detect_viol = detect_viol,
+                    mc_cores = mc_cores)
   
   # need to run bootstrap for backward solver
   if (solver == "backward" & se) {
     
-    nboot <- 50
+    nboot <- 500
     ate_boot <- c()
     for (nb in seq_len(nboot)) {
       
@@ -234,7 +273,7 @@ spc_optim <- function(type, opt_params, params, dat, method, solver,
 }
 
 infer_search <- function(dat, spc, solver, gt = FALSE, se = FALSE, 
-                         detect_viol = FALSE, nbreaks = 5) {
+                         detect_viol = FALSE, mc_cores = NULL, nbreaks = 5) {
   
   pattern <- spc$pattern
   if (spc$type == "bound") {
@@ -249,26 +288,47 @@ infer_search <- function(dat, spc, solver, gt = FALSE, se = FALSE,
   
   # if replicating with known ground truth, fit models
   if (gt) {
+   
     
-    Sigma0 <- binsensate:::infer_Sigma_IF(dat$X, dat$Y, dat$R, 
-                                          fi = list(list(0, 0), list(0, 0)))
-    lambda <- glm(X ~ ., data = data.frame(X = dat$X, R = dat$R), 
-                  family = "binomial")$coef
-    mu_mod <- glm(Y ~ ., data = data.frame(Y = dat$Y, X = dat$X, R = dat$R), 
-                  family = "binomial")
-    mu <- mu_mod$coef[-2]
-    theta_gt <- list(Sigma0 = Sigma0, lambda = lambda, mu_mod = mu_mod, mu = mu)
-    spc$params$ATE_gt <- NA
-    attr(gt, "theta_gt") <- theta_gt
+    if (is.element("W", names(dat))) {
+      
+      cor_mat <- t(cbind(dat$R, dat$W)) %*% cbind(dat$R, dat$W) / nrow(dat$R)
+      k <- ncol(dat$R)
+      d <- ncol(dat$W)
+      d_index <- k + seq_len(d)
+      theta <- tail(binsensate:::cormat_to_Sigma_cts(cor_mat, k, d), n = 1L)[[1]]
+      
+      theta_gt <- binsensate:::fit_lmb_rw(dat$X, dat$Y, dat$R, dat$W)
+      theta_gt[["SLO"]] <- theta
+      theta_gt[["Lambda"]] <- theta[d_index, -d_index, drop = FALSE]
+      theta_gt[["Sigma"]] <- theta[-d_index, -d_index]
+      theta_gt[["Sigma0"]] <- solve(theta[d_index, d_index, drop = FALSE])
+      attr(gt, "theta_gt") <- theta_gt
+    } else {
+      
+      Sigma0 <- binsensate:::infer_Sigma_IF(dat$X, dat$Y, dat$R, 
+                                            fi = list(list(0, 0), list(0, 0)))
+      lambda <- glm(X ~ ., data = data.frame(X = dat$X, R = dat$R), 
+                    family = "binomial")$coef
+      mu_mod <- glm(Y ~ ., data = data.frame(Y = dat$Y, X = dat$X, R = dat$R), 
+                    family = "binomial")
+      mu <- mu_mod$coef[-2]
+      theta_gt <- list(Sigma0 = Sigma0, lambda = lambda, mu_mod = mu_mod, mu = mu)
+      spc$params$ATE_gt <- NA
+      attr(gt, "theta_gt") <- theta_gt
+    }
+    
   } else theta_gt <- NULL
   
   params <- lapply(
     seq_len(nrow(spc$params)),
     function(i) {
-      spc_optim(type, spc$opt_params[[i]], spc$params[i,],
-                dat, spc$method, solver, gt, se, detect_viol)
+      cat(i)
+      spc_optim(spc$type, spc$opt_params[[i]], spc$params[i,],
+                dat, spc$method, solver, gt, se, detect_viol, mc_cores)
     }#, mc.cores = n_cores()
   )
+  cat("\n")
   
   spc$params <- do.call(rbind, params)
   spc

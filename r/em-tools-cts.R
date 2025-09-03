@@ -178,3 +178,27 @@ cormat_to_Sigma_cts <- function(cor_mat, k, d, n_iter = 100, multistep = FALSE) 
   
   theta_t
 }
+
+fit_lmb_rw <- function(X, Y, R, W) {
+  
+  xfit <- glm(X ~ ., data = data.frame(X = X, R = R, W = W), family = "binomial")
+  xz_coeff <- grepl("^R", names(xfit$coefficients))
+  xw_coeff <- grepl("^W", names(xfit$coefficients))
+  lambda_z <- xfit$coefficients[xz_coeff]
+  lambda_w <- xfit$coefficients[xw_coeff]
+  lambda_icept <- xfit$coefficients[1]
+  
+  yfit <- glm(Y ~ ., data = data.frame(Y = Y, X = X, R = R, W = W), 
+              family = "binomial")
+  yz_coeff <- grepl("^R", names(yfit$coefficients))
+  yw_coeff <- grepl("^W", names(yfit$coefficients))
+  
+  mu_icept <- yfit$coefficients[1]
+  mu_z <- yfit$coefficients[yz_coeff]
+  mu_w <- yfit$coefficients[yw_coeff]
+  beta0 <- yfit$coefficients["X"]
+  
+  list(lambda_z = lambda_z, lambda_w = lambda_w, lambda_icept = lambda_icept,
+       mu_z = mu_z, mu_w = mu_w, mu_icept = mu_icept,
+       beta = beta0, beta_se = summary(yfit)$coefficients["X", "Std. Error"])
+}
