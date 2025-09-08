@@ -55,7 +55,6 @@ spc_dir_zinf <- infer_search(dat, spc_dir_zinf, solver = slvr, se = TRUE,
 if (slvr == "em") {
   
   datW <- real_data(n = n, k = k, add_W = TRUE)
-  datW$W <- cbind(datW$W, datW$W^2)
   spc_dir_ifw <- search_space(pattern = "x", method = "IF", 
                               fi = seq(0, 0.1, 0.025), fi2 = 0,
                               type = "range", k = k)

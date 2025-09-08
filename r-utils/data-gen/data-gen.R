@@ -1,19 +1,24 @@
 
-zw_2d <- function(k, n_samp, seed = 2022, SLO) {
+zw_2d <- function(k, n_samp, seed = 2022, theta) {
   
   set.seed(seed)
+  
+  SLO <- theta[["SLO"]]
+  b <- theta[["b"]]
   
   d_index <- k + seq_len(ncol(SLO) - k)
   Sigma <- SLO[-d_index, -d_index]
   Sigma0 <- solve(SLO[d_index, d_index, drop = FALSE])
   Lambda <- SLO[d_index, -d_index, drop = FALSE]
   
-  pz <- binsensate:::theta_Ez(SLO, d_index)
+  pz <- binsensate:::theta_Ez(theta, d_index)
   z <- sample.int(2^k, size = n_samp, prob = pz, replace = TRUE)
   z <- binsensate:::cpp_idx_to_bit(z-1, k)
   w <- z %*% t(Sigma0 %*% Lambda) + 
-    MASS::mvrnorm(n_samp, mu = rep(0, length(d_index)), Sigma = Sigma0)
-  cbind(z, w)
+    MASS::mvrnorm(n_samp, mu = as.vector(Sigma0 %*% b), Sigma = Sigma0)
+  colnames(w) <- paste0("W", seq_len(ncol(w)))
+  colnames(z) <- paste0("Z", seq_len(ncol(z)))
+  cbind(z,w)
 }
 
 synth_data_mid <- function(n = 10^4, k = 5, seed = 2025, 
@@ -23,8 +28,11 @@ synth_data_mid <- function(n = 10^4, k = 5, seed = 2025,
                            class = c("latent_u", "expfam-1d", "expfam-2d",
                                      "expfam-2d*", "expfam-2d-cts"),
                            Sigma = NULL,
-                           SLO = NULL,
-                           lam = NULL, mu = NULL, 
+                           theta = NULL,
+                           lam = NULL, 
+                           lam_tauw = NULL,
+                           tau_xw = NULL,
+                           mu = NULL, 
                            icept_x = NULL, icept_y = NULL,
                            beta = NULL, ate = NULL) {
   
@@ -55,7 +63,7 @@ synth_data_mid <- function(n = 10^4, k = 5, seed = 2025,
               `expfam-1d` = z_1d(k, n, seed),
               `expfam-2d` = z_2d(k, n, seed, Sigma),
               `expfam-2d*` = z_2d(k, n, seed, Sigma, Sigma_adv = TRUE),
-              `expfam-2d-cts` = zw_2d(k, n, seed, SLO)
+              `expfam-2d-cts` = zw_2d(k, n, seed, theta)
   )
   
   use_icept <- TRUE # whether to use a specified intercept
@@ -71,7 +79,10 @@ synth_data_mid <- function(n = 10^4, k = 5, seed = 2025,
   
   if (use_icept) {
     
-    X <- rbinom(n, 1, expit(Z %*% lam + icept_x))
+    logitx <- Z %*% lam + icept_x
+    if (!is.null(tau_xw)) 
+      logitx <- tau_xw(Z[, -seq_len(k), drop=FALSE]) %*% lam_tauw
+    X <- rbinom(n, 1, expit(logitx))
     Y <- as.integer(u < expit(Z %*% mu + X * beta + icept_y))
     Y0 <- u < expit(Z %*% mu + 0 * beta + icept_y)
     Y1 <- u < expit(Z %*% mu + 1 * beta + icept_y)
@@ -157,7 +168,7 @@ synth_data_mid <- function(n = 10^4, k = 5, seed = 2025,
     lxy = lxy
   )
   
-  if (!is.null(SLO)) dat[["W"]] <- Z[, -seq_len(k)]
+  if (!is.null(theta)) dat[["W"]] <- Z[, -seq_len(k), drop = FALSE]
   dat
 }
 

@@ -86,25 +86,30 @@ double cpp_lambda(int i, int j, int k, int l, int dim, int p) {
   if (l != -1 && l < p) ret *= ((1<<l & dim) > 0);
   
   if (i != -1 && j != -1 && i < p && j < p && i != j) ret *= 2;
-  if (k != -1 && l != -1 && k < p && k < p && k != l) ret *= 2;
+  if (k != -1 && l != -1 && k < p && l < p && k != l) ret *= 2;
   
   return ret;
 }
 
 // [[Rcpp::export]]
 NumericVector cpp_logc_ij_cts(double Amut, NumericVector Ez, IntegerVector idx, 
-                              NumericMatrix Sigma0, NumericMatrix Sig0Lam, 
-                              int p, int d) {
+                              NumericMatrix Sigma0, NumericMatrix Sig0Lam,
+                              NumericVector Sig0b, int p, int d) {
   
-  NumericVector grad(idx.length());
+  NumericVector grad(idx.length()+d);
   NumericVector mu(d);
   double eij;
   int i, j;
   
-  for (int x = 0; x < idx.length(); ++x) {
+  for (int x = 0; x < idx.length()+d; ++x) {
     
-    i = (idx(x) / (p+d));
-    j = idx(x) % (p+d);
+    if (x >= idx.length()) {
+      i = x - idx.length() + p;
+      j = -1;
+    } else {
+      i = (idx(x) / (p+d));
+      j = idx(x) % (p+d);
+    }
     
     eij = 0;
     
@@ -112,7 +117,7 @@ NumericVector cpp_logc_ij_cts(double Amut, NumericVector Ez, IntegerVector idx,
       
       // compute mu
       for (int iz = 0; iz < d; ++iz) {
-        mu(iz) = 0;
+        mu(iz) = Sig0b(iz);
         for (int ii = 0; ii < p; ++ii) {
           
           mu(iz) += Sig0Lam(iz, ii) * ((1<<ii & dim) > 0);
@@ -132,21 +137,32 @@ NumericVector cpp_logc_ij_cts(double Amut, NumericVector Ez, IntegerVector idx,
 // [[Rcpp::export]]
 NumericMatrix cpp_hess_cts(double Amut, NumericVector Ez, IntegerVector idx, 
                            NumericMatrix Sigma0, NumericMatrix Sig0Lam, 
-                           int p, int d) {
+                           NumericVector Sig0b, int p, int d) {
   
-  NumericMatrix hess(idx.length(), idx.length());
+  NumericMatrix hess(idx.length() + d, idx.length() + d);
   NumericVector mu(d);
   double eij, ekl, eijkl;
   int i, j, k, l;
   
-  for (int x = 0; x < idx.length(); ++x) {
+  for (int x = 0; x < idx.length() + d; ++x) {
     
-    for (int y = 0; y < idx.length(); ++y) {
+    for (int y = 0; y < idx.length() + d; ++y) {
       
-      i = idx(x) / (p+d);
-      j = idx(x) % (p+d);
-      k = idx(y) / (p+d);
-      l = idx(y) % (p+d);
+      if (x >= idx.length()) {
+        i = x - idx.length() + p;
+        j = -1;
+      } else {
+        i = (idx(x) / (p+d));
+        j = idx(x) % (p+d);
+      }
+      
+      if (y >= idx.length()) {
+        k = y - idx.length() + p;
+        l = -1;
+      } else {
+        k = (idx(y) / (p+d));
+        l = idx(y) % (p+d);
+      }
       
       // Rcpp::Rcout << " x = " << x << " y = " << y << " i = " << i << " j = " << j << " k = " << k << " l = " << l << "\n";
       
@@ -156,7 +172,8 @@ NumericMatrix cpp_hess_cts(double Amut, NumericVector Ez, IntegerVector idx,
         
         // compute mu
         for (int ai = 0; ai < d; ++ai) {
-          mu(ai) = 0;
+          mu(ai) = Sig0b(ai);
+          
           for (int bi = 0; bi < p; ++bi) {
             
             mu(ai) += Sig0Lam(ai, bi) * ((1<<bi & dim) > 0);
@@ -179,32 +196,7 @@ NumericMatrix cpp_hess_cts(double Amut, NumericVector Ez, IntegerVector idx,
   return hess;
 }
 
-// [[Rcpp::export]]
-NumericVector cpp_pzw_prop(NumericMatrix Sigma, NumericVector LamTw) {
-  
-  int k = Sigma.ncol(); int pz_dim = 1;
-  for (int i = 0; i < k; ++i) pz_dim *= 2;
-  NumericVector pz(pz_dim);
-  
-  for (int i = 0; i < pz_dim; ++i) {
-    
-    for (int ki = 0; ki < k; ++ki) {
-      
-      pz(i) += LamTw(ki) * ((i & (1<<ki)) > 0);
-      
-      for (int kj = 0; kj < k; ++kj) {
-        
-        pz(i) += Sigma(ki, kj) * ((i & (1<<ki)) > 0) * ((i & (1<<kj)) > 0);
-      }
-    }
-    
-    pz(i) = exp(pz(i));
-  }
-  
-  return pz;
-}
-
-/* ---------- helpers ---------- */
+/* eta function */
 inline double eta_fast(int i,int j,int k,int l,
                        const NumericVector& mu,
                        const NumericMatrix& S,
@@ -247,7 +239,7 @@ inline double eta_fast(int i,int j,int k,int l,
   return f*e;
 }
 
-/* ---------- helpers ---------- */
+/* two-index lambda function */
 inline double lambda2_fast(int a,int b,int dim,int p,const double* bits){
   double v = 1.0;
   if (a != -1 && a < p){ v *= bits[dim*p + a]; if(v==0.0) return 0.0; }
@@ -256,7 +248,7 @@ inline double lambda2_fast(int a,int b,int dim,int p,const double* bits){
   return v;
 }
 
-/* four‑index λ (identical to original logic, incl. the k–l typo) */
+/* four‑index lambda function */
 inline double lambda4_fast(int i,int j,int k,int l,int dim,int p,const double* bits){
   double v = 1.0;
   if (i != -1 && i < p){ v *= bits[dim*p + i]; if(v==0.0) return 0.0; }
@@ -265,7 +257,7 @@ inline double lambda4_fast(int i,int j,int k,int l,int dim,int p,const double* b
   if (l != -1 && l < p){ v *= bits[dim*p + l]; if(v==0.0) return 0.0; }
   
   if (i != -1 && j != -1 && i < p && j < p && i != j) v *= 2.0;
-  if (k != -1 && l != -1 && k < p && k != l)          v *= 2.0;  // matches old bug
+  if (k != -1 && l != -1 && k < p && l < p && k != l) v *= 2.0;
   
   return v;
 }
@@ -275,19 +267,20 @@ inline double lambda4_fast(int i,int j,int k,int l,int dim,int p,const double* b
 // [[Rcpp::export]]
 NumericMatrix cpp_hess_cts_fast(double Amut, NumericVector Ez, IntegerVector idx,
                                 NumericMatrix Sigma0, NumericMatrix Sig0Lam,
-                                int p, int d) {
+                                NumericVector Sig0b, int p, int d) {
   
   const int Ez_len  = Ez.size();
   const int idx_len = idx.size();
+  int i, j, k, l;
   
   /* μ(a, dim) pre‑compute */
   NumericMatrix mu_mat(d, Ez_len);
   for (int dim = 0; dim < Ez_len; ++dim){
     for (int a = 0; a < d; ++a){
-      double s = 0.0;
+      double s = Sig0b(a);
       for (int b = 0; b < p; ++b)
         if ((dim >> b) & 1) s += Sig0Lam(a, b);
-        mu_mat(a, dim) = s;
+      mu_mat(a, dim) = s;
     }
   }
   
@@ -298,16 +291,27 @@ NumericMatrix cpp_hess_cts_fast(double Amut, NumericVector Ez, IntegerVector idx
       bits[dim*p + i] = (double)((dim >> i) & 1);
   
   /* Hessian */
-  NumericMatrix hess(idx_len, idx_len);
+  NumericMatrix hess(idx_len + d, idx_len + d);
   
-  for (int x = 0; x < idx_len; ++x){
+  for (int x = 0; x < idx_len + d; ++x){
     
-    int i = idx[x] / (p + d);
-    int j = idx[x] % (p + d);
+    if (x >= idx_len) {
+      i = x - idx_len + p;
+      j = -1;
+    } else {
+      i = idx[x] / (p + d);
+      j = idx[x] % (p + d);
+    }
     
-    for (int y = 0; y < idx_len; ++y){
-      int k = idx[y] / (p + d);
-      int l = idx[y] % (p + d);
+    for (int y = 0; y < idx_len + d; ++y){
+      
+      if (y >= idx_len) {
+        k = y - idx_len + p;
+        l = -1;
+      } else {
+        k = idx[y] / (p + d);
+        l = idx[y] % (p + d);
+      }
       
       double eij = 0.0, ekl = 0.0, eijkl = 0.0;
       
@@ -328,4 +332,29 @@ NumericMatrix cpp_hess_cts_fast(double Amut, NumericVector Ez, IntegerVector idx
   }
   
   return hess;
+}
+
+// [[Rcpp::export]]
+NumericVector cpp_pzw_prop(NumericMatrix Sigma, NumericVector LamTw) {
+  
+  int k = Sigma.ncol(); int pz_dim = 1;
+  for (int i = 0; i < k; ++i) pz_dim *= 2;
+  NumericVector pz(pz_dim);
+  
+  for (int i = 0; i < pz_dim; ++i) {
+    
+    for (int ki = 0; ki < k; ++ki) {
+      
+      pz(i) += LamTw(ki) * ((i & (1<<ki)) > 0);
+      
+      for (int kj = 0; kj < k; ++kj) {
+        
+        pz(i) += Sigma(ki, kj) * ((i & (1<<ki)) > 0) * ((i & (1<<kj)) > 0);
+      }
+    }
+    
+    pz(i) = exp(pz(i));
+  }
+  
+  return pz;
 }

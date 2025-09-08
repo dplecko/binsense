@@ -18,7 +18,9 @@ em_solver_cts(
   rand_init = FALSE,
   se = FALSE,
   detect_viol = FALSE,
-  mc_cores = NULL
+  mc_cores = NULL,
+  tau_xw = NULL,
+  tau_yw = NULL
 )
 }
 \arguments{
@@ -63,6 +65,14 @@ inverse problem. Defaults to \code{FALSE}.}
 
 \item{mc_cores}{Number of cores used for parallelization during Monte Carlo
 sampling in the M-step.}
+
+\item{tau_xw}{A transformation function applied to the continuous confounders
+W, after which the transformed data is included in the regression function
+for the treatment variable X.}
+
+\item{tau_yw}{A transformation function applied to the continuous confounders
+W, after which the transformed data is included in the regression function
+for the outcome variable Y.}
 }
 \description{
 Binary Sensitivity Analysis using Expectation-Maximization in an Exponential

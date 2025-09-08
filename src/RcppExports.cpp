@@ -156,8 +156,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_logc_ij_cts
-NumericVector cpp_logc_ij_cts(double Amut, NumericVector Ez, IntegerVector idx, NumericMatrix Sigma0, NumericMatrix Sig0Lam, int p, int d);
-RcppExport SEXP _binsensate_cpp_logc_ij_cts(SEXP AmutSEXP, SEXP EzSEXP, SEXP idxSEXP, SEXP Sigma0SEXP, SEXP Sig0LamSEXP, SEXP pSEXP, SEXP dSEXP) {
+NumericVector cpp_logc_ij_cts(double Amut, NumericVector Ez, IntegerVector idx, NumericMatrix Sigma0, NumericMatrix Sig0Lam, NumericVector Sig0b, int p, int d);
+RcppExport SEXP _binsensate_cpp_logc_ij_cts(SEXP AmutSEXP, SEXP EzSEXP, SEXP idxSEXP, SEXP Sigma0SEXP, SEXP Sig0LamSEXP, SEXP Sig0bSEXP, SEXP pSEXP, SEXP dSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -166,15 +166,16 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< IntegerVector >::type idx(idxSEXP);
     Rcpp::traits::input_parameter< NumericMatrix >::type Sigma0(Sigma0SEXP);
     Rcpp::traits::input_parameter< NumericMatrix >::type Sig0Lam(Sig0LamSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Sig0b(Sig0bSEXP);
     Rcpp::traits::input_parameter< int >::type p(pSEXP);
     Rcpp::traits::input_parameter< int >::type d(dSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_logc_ij_cts(Amut, Ez, idx, Sigma0, Sig0Lam, p, d));
+    rcpp_result_gen = Rcpp::wrap(cpp_logc_ij_cts(Amut, Ez, idx, Sigma0, Sig0Lam, Sig0b, p, d));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_hess_cts
-NumericMatrix cpp_hess_cts(double Amut, NumericVector Ez, IntegerVector idx, NumericMatrix Sigma0, NumericMatrix Sig0Lam, int p, int d);
-RcppExport SEXP _binsensate_cpp_hess_cts(SEXP AmutSEXP, SEXP EzSEXP, SEXP idxSEXP, SEXP Sigma0SEXP, SEXP Sig0LamSEXP, SEXP pSEXP, SEXP dSEXP) {
+NumericMatrix cpp_hess_cts(double Amut, NumericVector Ez, IntegerVector idx, NumericMatrix Sigma0, NumericMatrix Sig0Lam, NumericVector Sig0b, int p, int d);
+RcppExport SEXP _binsensate_cpp_hess_cts(SEXP AmutSEXP, SEXP EzSEXP, SEXP idxSEXP, SEXP Sigma0SEXP, SEXP Sig0LamSEXP, SEXP Sig0bSEXP, SEXP pSEXP, SEXP dSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -183,9 +184,28 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< IntegerVector >::type idx(idxSEXP);
     Rcpp::traits::input_parameter< NumericMatrix >::type Sigma0(Sigma0SEXP);
     Rcpp::traits::input_parameter< NumericMatrix >::type Sig0Lam(Sig0LamSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Sig0b(Sig0bSEXP);
     Rcpp::traits::input_parameter< int >::type p(pSEXP);
     Rcpp::traits::input_parameter< int >::type d(dSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_hess_cts(Amut, Ez, idx, Sigma0, Sig0Lam, p, d));
+    rcpp_result_gen = Rcpp::wrap(cpp_hess_cts(Amut, Ez, idx, Sigma0, Sig0Lam, Sig0b, p, d));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_hess_cts_fast
+NumericMatrix cpp_hess_cts_fast(double Amut, NumericVector Ez, IntegerVector idx, NumericMatrix Sigma0, NumericMatrix Sig0Lam, NumericVector Sig0b, int p, int d);
+RcppExport SEXP _binsensate_cpp_hess_cts_fast(SEXP AmutSEXP, SEXP EzSEXP, SEXP idxSEXP, SEXP Sigma0SEXP, SEXP Sig0LamSEXP, SEXP Sig0bSEXP, SEXP pSEXP, SEXP dSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type Amut(AmutSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Ez(EzSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type idx(idxSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type Sigma0(Sigma0SEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type Sig0Lam(Sig0LamSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Sig0b(Sig0bSEXP);
+    Rcpp::traits::input_parameter< int >::type p(pSEXP);
+    Rcpp::traits::input_parameter< int >::type d(dSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_hess_cts_fast(Amut, Ez, idx, Sigma0, Sig0Lam, Sig0b, p, d));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -198,23 +218,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericMatrix >::type Sigma(SigmaSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type LamTw(LamTwSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_pzw_prop(Sigma, LamTw));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_hess_cts_fast
-NumericMatrix cpp_hess_cts_fast(double Amut, NumericVector Ez, IntegerVector idx, NumericMatrix Sigma0, NumericMatrix Sig0Lam, int p, int d);
-RcppExport SEXP _binsensate_cpp_hess_cts_fast(SEXP AmutSEXP, SEXP EzSEXP, SEXP idxSEXP, SEXP Sigma0SEXP, SEXP Sig0LamSEXP, SEXP pSEXP, SEXP dSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type Amut(AmutSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type Ez(EzSEXP);
-    Rcpp::traits::input_parameter< IntegerVector >::type idx(idxSEXP);
-    Rcpp::traits::input_parameter< NumericMatrix >::type Sigma0(Sigma0SEXP);
-    Rcpp::traits::input_parameter< NumericMatrix >::type Sig0Lam(Sig0LamSEXP);
-    Rcpp::traits::input_parameter< int >::type p(pSEXP);
-    Rcpp::traits::input_parameter< int >::type d(dSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_hess_cts_fast(Amut, Ez, idx, Sigma0, Sig0Lam, p, d));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -314,10 +317,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_binsensate_cpp_isserlis", (DL_FUNC) &_binsensate_cpp_isserlis, 3},
     {"_binsensate_cpp_eta", (DL_FUNC) &_binsensate_cpp_eta, 7},
     {"_binsensate_cpp_lambda", (DL_FUNC) &_binsensate_cpp_lambda, 6},
-    {"_binsensate_cpp_logc_ij_cts", (DL_FUNC) &_binsensate_cpp_logc_ij_cts, 7},
-    {"_binsensate_cpp_hess_cts", (DL_FUNC) &_binsensate_cpp_hess_cts, 7},
+    {"_binsensate_cpp_logc_ij_cts", (DL_FUNC) &_binsensate_cpp_logc_ij_cts, 8},
+    {"_binsensate_cpp_hess_cts", (DL_FUNC) &_binsensate_cpp_hess_cts, 8},
+    {"_binsensate_cpp_hess_cts_fast", (DL_FUNC) &_binsensate_cpp_hess_cts_fast, 8},
     {"_binsensate_cpp_pzw_prop", (DL_FUNC) &_binsensate_cpp_pzw_prop, 2},
-    {"_binsensate_cpp_hess_cts_fast", (DL_FUNC) &_binsensate_cpp_hess_cts_fast, 7},
     {"_binsensate_cpp_idx", (DL_FUNC) &_binsensate_cpp_idx, 4},
     {"_binsensate_cpp_scaling_2d", (DL_FUNC) &_binsensate_cpp_scaling_2d, 1},
     {"_binsensate_cpp_hess_sigma", (DL_FUNC) &_binsensate_cpp_hess_sigma, 3},

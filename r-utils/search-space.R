@@ -172,7 +172,7 @@ bounded_optim <- function(pattern, opt_params, params, dat, method, solver) {
 } 
 
 spc_optim <- function(type, opt_params, params, dat, method, solver, 
-                      gt, se, detect_viol, mc_cores) {
+                      gt, se, detect_viol, mc_cores, tau_xw) {
   
   if (type == "bound") {
     
@@ -193,12 +193,14 @@ spc_optim <- function(type, opt_params, params, dat, method, solver,
       theta_gt <- attr(gt, "theta_gt")
       seed <- sample.int(10^5, size = 1)
       dati <- synth_data_mid(
-        n = nrow(dat$R), k = nrow(theta_gt$Sigma),
+        n = nrow(dat$R), k = ncol(dat$R),
         seed = seed, fi = fi, method = method,
         class = "expfam-2d-cts",
         Sigma = theta_gt$Sigma, 
-        SLO = theta_gt$SLO,
-        lam = c(theta_gt$lambda_z, theta_gt$lambda_w), 
+        theta = theta_gt$theta,
+        lam = c(theta_gt$lambda_z, theta_gt$lambda_w),
+        lam_tauw = theta_gt$lambda_tauw,
+        tau_xw = theta_gt$tau_xw,
         mu = c(theta_gt$mu_z, theta_gt$mu_w),
         icept_x = theta_gt$lambda_icept, icept_y = theta_gt$mu_icept,
         beta = ate_to_or_cts(
@@ -230,7 +232,7 @@ spc_optim <- function(type, opt_params, params, dat, method, solver,
   
   res <- binsensate(dati$X, dati$Y, dati$R, W = dati$W, fi = fi, method = method,
                     solver = solver, se = se, detect_viol = detect_viol,
-                    mc_cores = mc_cores)
+                    mc_cores = mc_cores, tau_xw = tau_xw)
   
   # need to run bootstrap for backward solver
   if (solver == "backward" & se) {
@@ -273,7 +275,8 @@ spc_optim <- function(type, opt_params, params, dat, method, solver,
 }
 
 infer_search <- function(dat, spc, solver, gt = FALSE, se = FALSE, 
-                         detect_viol = FALSE, mc_cores = NULL, nbreaks = 5) {
+                         detect_viol = FALSE, mc_cores = NULL, nbreaks = 5,
+                         tau_xw = NULL) {
   
   pattern <- spc$pattern
   if (spc$type == "bound") {
@@ -288,21 +291,19 @@ infer_search <- function(dat, spc, solver, gt = FALSE, se = FALSE,
   
   # if replicating with known ground truth, fit models
   if (gt) {
-   
-    
+  
     if (is.element("W", names(dat))) {
       
       cor_mat <- t(cbind(dat$R, dat$W)) %*% cbind(dat$R, dat$W) / nrow(dat$R)
+      mu_w <- colMeans(dat$W)
       k <- ncol(dat$R)
       d <- ncol(dat$W)
       d_index <- k + seq_len(d)
-      theta <- tail(binsensate:::cormat_to_Sigma_cts(cor_mat, k, d), n = 1L)[[1]]
+      theta <- tail(binsensate:::cormat_to_Sigma_cts(cor_mat, mu_w, k, d), n = 1L)[[1]]
       
-      theta_gt <- binsensate:::fit_lmb_rw(dat$X, dat$Y, dat$R, dat$W)
-      theta_gt[["SLO"]] <- theta
-      theta_gt[["Lambda"]] <- theta[d_index, -d_index, drop = FALSE]
-      theta_gt[["Sigma"]] <- theta[-d_index, -d_index]
-      theta_gt[["Sigma0"]] <- solve(theta[d_index, d_index, drop = FALSE])
+      theta_gt <- binsensate:::fit_lmb_rw(dat$X, dat$Y, dat$R, dat$W, 
+                                          tau_xw = tau_xw)
+      theta_gt[["theta"]] <- theta
       attr(gt, "theta_gt") <- theta_gt
     } else {
       
@@ -325,7 +326,8 @@ infer_search <- function(dat, spc, solver, gt = FALSE, se = FALSE,
     function(i) {
       cat(i)
       spc_optim(spc$type, spc$opt_params[[i]], spc$params[i,],
-                dat, spc$method, solver, gt, se, detect_viol, mc_cores)
+                dat, spc$method, solver, gt, se, detect_viol, mc_cores,
+                tau_xw)
     }#, mc.cores = n_cores()
   )
   cat("\n")

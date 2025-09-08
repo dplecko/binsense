@@ -45,20 +45,20 @@ cpp_lambda <- function(i, j, k, l, dim, p) {
     .Call('_binsensate_cpp_lambda', PACKAGE = 'binsensate', i, j, k, l, dim, p)
 }
 
-cpp_logc_ij_cts <- function(Amut, Ez, idx, Sigma0, Sig0Lam, p, d) {
-    .Call('_binsensate_cpp_logc_ij_cts', PACKAGE = 'binsensate', Amut, Ez, idx, Sigma0, Sig0Lam, p, d)
+cpp_logc_ij_cts <- function(Amut, Ez, idx, Sigma0, Sig0Lam, Sig0b, p, d) {
+    .Call('_binsensate_cpp_logc_ij_cts', PACKAGE = 'binsensate', Amut, Ez, idx, Sigma0, Sig0Lam, Sig0b, p, d)
 }
 
-cpp_hess_cts <- function(Amut, Ez, idx, Sigma0, Sig0Lam, p, d) {
-    .Call('_binsensate_cpp_hess_cts', PACKAGE = 'binsensate', Amut, Ez, idx, Sigma0, Sig0Lam, p, d)
+cpp_hess_cts <- function(Amut, Ez, idx, Sigma0, Sig0Lam, Sig0b, p, d) {
+    .Call('_binsensate_cpp_hess_cts', PACKAGE = 'binsensate', Amut, Ez, idx, Sigma0, Sig0Lam, Sig0b, p, d)
+}
+
+cpp_hess_cts_fast <- function(Amut, Ez, idx, Sigma0, Sig0Lam, Sig0b, p, d) {
+    .Call('_binsensate_cpp_hess_cts_fast', PACKAGE = 'binsensate', Amut, Ez, idx, Sigma0, Sig0Lam, Sig0b, p, d)
 }
 
 cpp_pzw_prop <- function(Sigma, LamTw) {
     .Call('_binsensate_cpp_pzw_prop', PACKAGE = 'binsensate', Sigma, LamTw)
-}
-
-cpp_hess_cts_fast <- function(Amut, Ez, idx, Sigma0, Sig0Lam, p, d) {
-    .Call('_binsensate_cpp_hess_cts_fast', PACKAGE = 'binsensate', Amut, Ez, idx, Sigma0, Sig0Lam, p, d)
 }
 
 cpp_idx <- function(x, a, b, dim) {

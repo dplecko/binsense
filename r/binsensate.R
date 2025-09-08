@@ -518,12 +518,18 @@ em_solver <- function(X, Y, R, fi, method, A, mc_per_samp = 10, n_epoch = 10,
 #' @inheritParams em_solver
 #' @param mc_cores Number of cores used for parallelization during Monte Carlo
 #' sampling in the M-step.
+#' @param tau_xw A transformation function applied to the continuous confounders
+#' W, after which the transformed data is included in the regression function
+#' for the treatment variable X.
+#' @param tau_yw A transformation function applied to the continuous confounders
+#' W, after which the transformed data is included in the regression function
+#' for the outcome variable Y.
 #' @importFrom parallel mclapply
 #' @export
 em_solver_cts <- function(X, Y, R, W, fi, method, A, 
                           mc_per_samp = 10, n_epoch = 10, 
                           rand_init = FALSE, se = FALSE, detect_viol = FALSE,
-                          mc_cores = NULL) {
+                          mc_cores = NULL, tau_xw = NULL, tau_yw = NULL) {
   
   # Step (0) - infer Sigma
   lmb <- theta <- Sigma <- list()
@@ -533,17 +539,17 @@ em_solver_cts <- function(X, Y, R, W, fi, method, A,
   d_index <- k + seq_len(d)
   
   cor_mat <- t(cbind(R, W)) %*% cbind(R, W) / nrow(R)
-  theta[[1]] <- tail(cormat_to_Sigma_cts(cor_mat, k, d), n = 1L)[[1]]
+  m_w <- colMeans(W)
+  theta[[1]] <- tail(cormat_to_Sigma_cts(cor_mat, m_w, k, d), n = 1L)[[1]]
   
   # extract Sigma, Lambda, Sigma0
-  Sigma <- theta[[1]][seq_len(k), seq_len(k)]
-  Lambda <- theta[[1]][-seq_len(k), seq_len(k), drop=FALSE]
-  Omega <- theta[[1]][-seq_len(k), -seq_len(k)]
+  Sigma <- theta[[1]][["SLO"]][seq_len(k), seq_len(k)]
+  Lambda <- theta[[1]][["SLO"]][-seq_len(k), seq_len(k), drop=FALSE]
   
   # Step (0+) - infer initial lambda, mu, beta
   if (!rand_init) {
     
-    lmb[[1]] <- fit_lmb_rw(X, Y, R, W)
+    lmb[[1]] <- fit_lmb_rw(X, Y, R, W, tau_xw, tau_yw)
   } else {
     
     lmb[[1]] <- list(lambda_z = runif(ncol(R), -1, 1), 
@@ -560,15 +566,17 @@ em_solver_cts <- function(X, Y, R, W, fi, method, A,
   if (mfi == 0) {
     n_epoch <- 0
     ZW_mc <- cbind(Z = R, W = W)
+    Z_mc <- R
+    W_mc <- W
     se <- FALSE
   }
   
   final_run <- FALSE # flag for last iteration (for Z,W Monte Carlo)
   for (i in seq_len(n_epoch)) {
     
-    # get px_z, py_z
-    logitx_z <- cpp_p_z(lmb[[i]]$lambda_z) + lmb[[i]]$lambda_icept
-    logity_z <- cpp_p_z(lmb[[i]]$mu_z) + lmb[[i]]$mu_icept
+    # get px_z, py_z logits
+    logitx_z <- lmb_infer(lmb[[i]], type = "logitx_z")
+    logity_z <- lmb_infer(lmb[[i]], type = "logity_z")
     beta <- lmb[[i]]$beta
   
     mc_fn <- function(j) {
@@ -586,11 +594,10 @@ em_solver_cts <- function(X, Y, R, W, fi, method, A,
       # P(r | z, x, y) conditionals
       pr_zxy <- A[[1 + x]][[1 + y]][r_idx, ]
       
-      px_zw <- expit(logitx_z + sum(lmb[[i]]$lambda_w * w))
+      px_zw <- expit(logitx_z + lmb_infer(lmb[[i]], list(w=w), "logitx_w"))
       if (x == 1) px <- px_zw else px <- 1 - px_zw
       
-      # if (j %% 100 == 0) pb$tick()
-      py_zw <- expit(logity_z + sum(lmb[[i]]$mu_w * w) + beta * x)
+      py_zw <- expit(logity_z + lmb_infer(lmb[[i]], list(w=w, x=x), "logity_w"))
       if (y == 1) py <- py_zw else py <- 1 - py_zw
       
       probs <- pzw * px * py * pr_zxy
@@ -615,19 +622,30 @@ em_solver_cts <- function(X, Y, R, W, fi, method, A,
     
     # re-fit for Sigma
     ZW_mc <- as.matrix(mc_twist[, -c(1, 2)])
+    Z_mc <- ZW_mc[, seq_len(k), drop = FALSE]
+    W_mc <- ZW_mc[, -seq_len(k), drop = FALSE]
+    X_mc <- mc_twist[, 1]
+    Y_mc <- mc_twist[, 2]
+    
     cor_mat <- t(ZW_mc) %*% ZW_mc / nrow(ZW_mc)
     
     if (final_run) break
     
-    theta[[i+1]] <- tail(cormat_to_Sigma_cts(cor_mat, k, d), n = 1L)[[1]]
+    theta[[i+1]] <- tail(cormat_to_Sigma_cts(cor_mat, m_w, k, d), n = 1L)[[1]]
+    
+    # extract Sigma, Lambda, Sigma0
+    Sigma <- theta[[i+1]][["SLO"]][seq_len(k), seq_len(k)]
+    Lambda <- theta[[i+1]][["SLO"]][-seq_len(k), seq_len(k), drop=FALSE]
     
     # re-fit for lambda, mu, beta
     lmb[[i+1]] <- fit_lmb_rw(X = mc_twist[, 1], Y = mc_twist[, 2], 
                              R = mc_twist[, 2 + k_index], 
-                             W = mc_twist[, 2 + d_index])
+                             W = mc_twist[, 2 + d_index],
+                             tau_xw = tau_xw, tau_yw = tau_yw)
     
     # early stopping criterion
     scale <- 1
+    
     converged <- vec_norm(lmb[[i+1]]$lambda_z - lmb[[i]]$lambda_z)^2 < 
       scale * ncol(R) / nrow(R) &
       vec_norm(lmb[[i+1]]$mu_z - lmb[[i]]$mu_z)^2 < scale * ncol(R) / nrow(R) &
@@ -638,12 +656,7 @@ em_solver_cts <- function(X, Y, R, W, fi, method, A,
   # Louis' method for Standard Errors (SEs)
   if (se) {
 
-    # get the latest Monte Carlo sample
-    ZW_mc <- as.matrix(mc_twist[, -c(1, 2)])
-    X_mc <- mc_twist[, 1]
-    Y_mc <- mc_twist[, 2]
-
-    theta_idx <- which(!upper.tri(theta[[i]]))
+    theta_idx <- which(!upper.tri(theta[[i]][["SLO"]]))
 
     # compute via Exponential families
     tX <- do.call(rbind, lapply(
@@ -654,9 +667,10 @@ em_solver_cts <- function(X, Y, R, W, fi, method, A,
         unit_cor[seq_len(k), seq_len(k)] <- 2 * unit_cor[seq_len(k), seq_len(k)]
         unit_cor[-seq_len(k), -seq_len(k)] <- -1 * unit_cor[-seq_len(k), -seq_len(k)]
         diag(unit_cor) <- diag(unit_cor) / 2
-
-        c(unit_cor[theta_idx], X_mc[i], ZW_mc[i, ] * X_mc[i], Y_mc[i],
-          ZW_mc[i, ] * Y_mc[i], Y_mc[i] * X_mc[i])
+        
+        c(unit_cor[theta_idx], W_mc[i, ], # P(z,w) stats
+          X_mc[i], ZW_mc[i, ] * X_mc[i], # P(x | z, w) stats
+          Y_mc[i], ZW_mc[i, ] * Y_mc[i], Y_mc[i] * X_mc[i]) # P(y | x, z, w) stats
       }
     ))
 
@@ -708,9 +722,9 @@ em_solver_cts <- function(X, Y, R, W, fi, method, A,
   
   # ATE computation
   tl <- length(lmb)
-  
   beta <- lmb[[tl]]$beta
-  logity_zw <- cbind(1, ZW_mc) %*% c(lmb[[tl]]$mu_icept, lmb[[tl]]$mu_z, lmb[[tl]]$mu_w)
+  
+  logity_zw <- lmb_infer(lmb[[tl]], list(z=Z_mc, w=W_mc), "logity_zw")
   ATE_hat <- mean( (expit(logity_zw + beta) - expit(logity_zw)))
   if (!is.null(louis_se)) {
     
@@ -729,7 +743,7 @@ em_solver_cts <- function(X, Y, R, W, fi, method, A,
     ATE_upr = ATE_upr,
     solver = "two-stage-ecm",
     fi_change = fi_change,
-    SLO = theta,
+    theta = theta,
     beta = beta,
     beta_se = louis_se,
     LMB = lmb
