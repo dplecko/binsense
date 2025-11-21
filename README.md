@@ -1,6 +1,6 @@
-### Sensitivity Analysis for Causal Effects Under Imperfectly Observed Binary Data: Application to the Obesity Paradox
+### Sensitivity Analysis for Causal Effects Under Imperfectly Observed Binary Confounding: Application to the Obesity Paradox
 
-In this repository you can find the code necessary to reproduce the results from the paper ``Sensitivity Analysis for Causal Effects Under Imperfectly Observed Binary Data: Application to the Obesity Paradox''.
+In this repository you can find the code necessary to reproduce the results from the paper ``Sensitivity Analysis for Causal Effects Under Imperfectly Observed Binary Confounding: Application to the Obesity Paradox''.
 
 
 #### Reproducing the Results
